@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Train Widget — Deep Linear Network</title>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: { scale: 1.0 },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .sv-editor { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+    /* σ rows: label to the LEFT of the input, matching the dim-input pattern. */
+    .sv-row { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+    .sv-row .sv-label { font-size: 14px; color: #555; font-family: serif; font-style: italic; }
+    .sv-row input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .sv-row input[type="number"]:focus { outline: none; border-color: #cc8855; }
+    .sv-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .sv-preset-btn {
+      font-size: 12px; padding: 3px 10px; background: #fff4e8;
+      border: 1px solid #ddc09a; border-radius: 4px; color: #aa7744; cursor: pointer;
+    }
+    .sv-preset-btn:hover { background: #ffe8cc; }
+    .sv-warning { font-size: 12px; color: #aa4444; margin-top: 8px; display: none; }
+    /* Inline label row used inside the task box (data params, basis options) */
+    .inline-row { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+    .inline-field { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555; }
+    .inline-field input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    /* Details panels (model details, function details) — hidden by default,
+       revealed by their respective toggle buttons. */
+    .details-panel {
+      display: none;
+      margin-top: 1em;
+      padding-top: 1em;
+      border-top: 1px dashed #d8c0c0;
+    }
+    .details-panel.task-details {
+      border-top-color: #e0d0c0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <hr style="border: none; border-top: 2px solid #ccc; margin-top: 2em; margin-bottom: 0.2em;">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+    <div class="section-label" style="margin-bottom: 0;">SETUP</div>
+    <button id="resetToDefaultsButton" class="sim-button">reset to defaults</button>
+  </div>
+
+  <div style="margin-top: 0; margin-bottom: 2em;">
+
+    <!-- Combined TASK panel (orange). Always-visible essentials live at the
+         top; model and function details are tucked behind their own toggle
+         buttons. Network and task are merged into one panel since the
+         network's input/output dims are inherently linked to the task. -->
+    <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+
+      <div style="margin-left: 60px;">
+
+        <!-- Input distribution: kept out in the open. -->
+        <div class="inline-row" style="margin-bottom: 0.7em; gap: 18px;">
+          <span style="font-size: 14px; color: #555;">Inputs:</span>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="inputMode" id="inputModeWhitened" value="whitened">
+            Whitened (exact $\Sigma_x = I$)
+          </label>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="inputMode" id="inputModeGaussian" value="gaussian">
+            iid Gaussian $\mathcal{N}(0, I)$
+          </label>
+        </div>
+        <div id="inputModeWarning" style="font-size: 12px; color: #aa4444; margin-bottom: 0.7em; display: none;"></div>
+
+        <!-- Data params: nTrain, dataSeed. Also always-visible. -->
+        <div id="dataParamsContainer" class="inline-row" style="margin-bottom: 1em;"></div>
+
+        <!-- Initialization mode. Top-level toggle since it changes both the
+             weight construction and how to read the ε slider in TRAINING.
+             Random Gaussian = muP normal weights. Aligned = weights built in
+             the target's SVD basis (see model.js _alignedInit). -->
+        <div class="inline-row" style="margin-bottom: 1em; gap: 18px;">
+          <span style="font-size: 14px; color: #555;">Initialization:</span>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="initMode" id="initModeRandom" value="random">
+            Random Gaussian
+          </label>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="initMode" id="initModeAligned" value="aligned">
+            Aligned to SVD basis
+          </label>
+        </div>
+
+        <!-- Toggle buttons sit on one row so both panels are discoverable. -->
+        <div style="display: flex; gap: 0.6em; flex-wrap: wrap; margin-bottom: 0.2em;">
+          <button id="toggleModelDetailsButton" class="sim-button" type="button">show model details</button>
+          <button id="toggleFunctionDetailsButton" class="sim-button" type="button">show function details</button>
+        </div>
+
+        <!-- Collapsible: model details (network knobs + weight distribution caption). -->
+        <div id="modelDetailsPanel" class="details-panel task-details">
+
+          <!-- Hidden dims + model seed. -->
+          <div style="display: flex; gap: 2em; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1.2em;">
+
+            <!-- Hidden dim 1 -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim 1</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="range" id="hiddenDim1Slider" min="1" max="200" value="30" style="width: 120px;">
+                <span id="hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">30</span>
+              </div>
+            </div>
+
+            <!-- Second layer option -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">second layer</div>
+              <label style="font-size: 14px;">
+                <input type="checkbox" id="useSecondLayerCheckbox">
+                add layer
+              </label>
+              <div id="hiddenDim2Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <span style="font-size: 14px;">dim:</span>
+                <input type="range" id="hiddenDim2Slider" min="1" max="200" value="20" style="width: 100px;">
+                <span id="hiddenDim2Value" style="font-size: 14px; min-width: 40px; text-align: left;">20</span>
+              </div>
+            </div>
+
+            <!-- Model seed -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="number" id="modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Random orthogonal O toggle. Only shown when aligned init is on
+               (toggled by JS). When checked, the L-1 hidden-layer junction
+               rotations are random orthogonals seeded by modelSeed; otherwise
+               every junction is I, so each W_ℓ is a pure diagonal in the SVD
+               basis. -->
+          <div id="randomORow" class="inline-row" style="margin-bottom: 1em; display: none;">
+            <label class="inline-field" style="font-size: 14px;">
+              <input type="checkbox" id="randomOCheckbox">
+              Random orthogonal matrices $O$ (otherwise $O = I$)
+            </label>
+          </div>
+
+          <!-- Weight initialization caption. Text adapts to alignedInit mode
+               via JS (see updateInitModeDependentUI). The init-scale slider
+               itself lives in TRAINING; only its semantics change. -->
+          <div id="weightCaption" style="font-size: 12px; color: #999;">
+            Weights: $W_{ij}^{(\ell)} \sim \mathcal{N}(0,\, \varepsilon^2/n_{\ell-1})$
+          </div>
+
+          <!-- "Show init weights" checkbox + container. When checked, displays
+               each W_ℓ as plain numerical text (plus the product matrix and
+               the target W⋆ for direct comparison). Snapshot is taken when
+               simulation.initialize() runs (first start, or after reset) so
+               the display is frozen at t=0, not live during training. -->
+          <div style="margin-top: 0.8em;">
+            <label class="inline-field" style="font-size: 13px;">
+              <input type="checkbox" id="showInitWeightsCheckbox">
+              Show init weights (numerical)
+            </label>
+            <div id="initWeightsContainer" style="display: none; margin-top: 0.6em; font-family: Monaco, Consolas, 'Courier New', monospace; font-size: 11px; line-height: 1.45; background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 10px; max-height: 400px; overflow: auto; white-space: pre; color: #333;">
+              <span style="color: #999;">Click <em>start</em> to initialize the model and view its weights here.</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Collapsible: function details (dimensions + σ editor + preset + basis options). -->
+        <div id="functionDetailsPanel" class="details-panel task-details">
+
+          <div style="font-size: 15px; color: #666; margin-bottom: 10px;">
+            Ground Truth Matrix $W^\star$
+          </div>
+
+          <!-- Input/output dimensions. Drive how many σ values appear below,
+               so they live with the matrix spec rather than with the model knobs. -->
+          <div id="dimInputs" class="inline-row" style="margin-bottom: 12px;"></div>
+
+          <!-- σ editor sits right below the dims — the user wants the values
+               most likely to be tweaked closest to the dimension controls. -->
+          <div style="font-size: 14px; color: #666; margin-bottom: 6px;">
+            Singular Values $\sigma_m$ <span style="font-size: 12px; color: #999;">— Type any value</span>
+          </div>
+          <div id="svEditor" class="sv-editor"></div>
+          <div class="sv-presets">
+            <span style="font-size: 12px; color: #888; align-self: center; margin-right: 4px;">presets:</span>
+            <button class="sv-preset-btn" data-sv-preset="powers-of-2">powers of 2 (1, ½, ¼, …)</button>
+          </div>
+          <div id="svWarning" class="sv-warning"></div>
+
+          <!-- Basis options (random U,V + basis seed) live at the very bottom
+               as the least-frequently-touched controls in this panel. -->
+          <div id="basisOptions" class="inline-row" style="margin-top: 14px;"></div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3: Training (Blue) — learning rate, init scale, and loss formula. -->
+    <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+      <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <span style="font-size: 16px;">$\eta$:</span>
+            <input type="range" id="etaSlider" min="0" max="100" value="50" style="width: 120px;">
+            <span id="etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.01</span>
+          </div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div id="initScaleLabel" style="font-size: 15px; margin-bottom: 4px; color: #666;">init scale $\varepsilon$</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <input type="range" id="initScaleSlider" min="0" max="100" value="50" style="width: 120px;">
+            <input type="number" id="initScaleNumber" min="0" step="any" value="0.01" style="width: 80px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px;">
+          </div>
+          <div style="font-size: 11px; color: #999; margin-top: 4px;">slider 0.0001–1; type any value</div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+          <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2N}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+          <div style="font-size: 12px; margin-top: 4px; color: #999;">full-batch ($|B| = N$)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr style="border: none; border-top: 2px solid #ccc; margin-top: 2em; margin-bottom: 0.2em;">
+
+  <div class="section-label">SIMULATION</div>
+
+  <div style="margin-top: 1em; margin-bottom: 2em;">
+    <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+      <button id="startPauseButton" class="sim-button">start</button>
+      <button id="resetButton" class="sim-button">reset</button>
+    </div>
+
+    <div class="plots-container">
+      <div class="plot-wrapper">
+        <div class="plot-box">
+          <div class="plot-content">
+            <canvas id="lossChart" class="plot-canvas"></canvas>
+            <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+            <div class="x-axis-label">step</div>
+          </div>
+        </div>
+      </div>
+      <div class="plot-wrapper">
+        <div class="plot-box">
+          <div class="plot-content">
+            <canvas id="rightChart" class="plot-canvas"></canvas>
+            <div class="y-axis-label y-axis-label-norms">sharpness</div>
+            <div class="x-axis-label">step</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="logscale-control">
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="logScaleXCheckbox">
+        logscale x-axes
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="logScaleCheckbox">
+        logscale y-axes
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="clipSharpnessCheckbox" checked>
+        clip sharpness (3× threshold)
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="clipToEosCheckbox" checked>
+        clip to EoS
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="showPredictionCheckbox" checked>
+        show theory prediction
+      </label>
+      <span style="margin-right: 0.5em;">plot w.r.t.</span>
+      <span class="plot-xaxis-toggle">
+        <a href="#" id="step-link" class="active">step</a><a href="#" id="teff-link">$\eta \cdot \mathrm{step}$</a>
+      </span>
+      <span style="margin-left: 30px; display: inline-flex; align-items: center; gap: 8px;">
+        <span>EMA:</span>
+        <input type="range" id="emaSlider" min="0" max="100" value="0" style="width: 120px;">
+        <span id="emaValue" style="min-width: 30px; text-align: left;">off</span>
+      </span>
+    </div>
+
+    <div style="margin-top: 1.5em; text-align: center; color: #666; font-size: 14px;">
+      <label>steps/sec:</label>
+      <span id="stepsPerSec" style="font-weight: bold;">—</span>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+<script type="module" src="train_widget.js"></script>
+
+</body>
+</html>

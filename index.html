@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Linear Networks: NTK and Hessian Eigenvalues</title>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: { scale: 1.0 },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Shared training-widget styles (scoped so they don't bleed into prose) ── */
+    .sv-editor { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+    .sv-row { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+    .sv-row .sv-label { font-size: 14px; color: #555; font-family: serif; font-style: italic; }
+    .sv-row input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .sv-row input[type="number"]:focus { outline: none; border-color: #cc8855; }
+    .inline-row { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+    .inline-field { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555; }
+    .inline-field input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .details-panel { display: none; margin-top: 1em; padding-top: 1em; border-top: 1px dashed #d8c0c0; }
+    .details-panel.task-details { border-top-color: #e0d0c0; }
+    .sv-warning { font-size: 12px; color: #aa4444; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <h1 class="page-title" style="margin-bottom: 0.3em;">Deep Linear Networks: NTK and Hessian Eigenvalues</h1>
+
+  <div class="tutorial-content">
+
+    <!-- ==================== SECTION: Introduction ==================== -->
+
+    <p>Deep linear networks are neural networks without nonlinear activations. Although not very powerful models, they are a simple setting for studying gradient descent. Notably, one can derive an exact solution for the trajectory of weights under gradient flow (the continuous time limit of gradient descent) for such models under small initialization, yielding insight into how such models learn functions.</p>
+
+    <p>In the years after the original work on analytic solutions for the weights, interest has arisen in studying other properties of neural networks such as the neural tangent kernel and the Hessian eigenvalues of the loss landscape. These are higher-level descriptions that can be derived from the weights and dataset properties. There is a natural comparison to be made here between knowing the position and velocity of atoms, versus higher-level derived quantities such as temperature and pressure.</p>
+
+    <p>In this blog post, we show how the analytic weights leads to tractable and understandable solutions for the neural tangent kernel, and the Hessian eigenvalues. Our results can be quantitatively confirmed with in-browser experiments.</p>
+
+    <!-- ==================== SECTION: Deep Linear Networks ==================== -->
+
+    <h2>A Quick Review Of Deep Linear Networks</h2>
+
+    <p>Denote the true function that generates our data as $y = Mx$, and its singular value decomposition (SVD) by $M = U \Sigma_0 V^\top$. Saxe et al analyzed the gradient flow dynamics of a model $f(x) = W_2 W_1 x$, under the following assumptions:</p>
+
+    <ul style="margin-left: 1.5em;">
+      <li>Inputs are whitened such that $X X^\top = I$ — this means that all our input dimensions are independent (a counterexample would be if, say, $x_1$ and $x_2$ happen to be correlated in our dataset).</li>
+      <li>Model weights can be decomposed in the SVD basis as $W_1 = O \Sigma^{1/2} V^\top,\ W_2 = U \Sigma^{1/2} O^\top$, where the singular values of $W_1, W_2$ are identical and $O$ is an arbitrary orthogonal matrix such that $O^\top O = I$, which means it does not affect our function.</li>
+    </ul>
+
+    <p>Their analysis showed the singular values $\Sigma(t)$ of our model $f(x) = U \Sigma(t) V^\top x$ evolve as</p>
+
+    $$\frac{d\sigma}{dt} \;=\; 2\,\sigma\,(s - \sigma),$$
+
+    <p>where $s$ is the corresponding diagonal entry of the target $\Sigma$.</p>
+
+    <p>The second assumption here is unusual. Experiments with small initialization reveal that it is approximately true for small initialization, where networks quickly learn the SVD basis with approximately balanced singular values between layers. Then the model slowly learns to adjust the strength of its singular values to match the true function.</p>
+
+    <p>This results in a staircase-like loss curve: each mode stays near its small initial value for a long time, then rapidly transitions to its target value $s$. The transition time scales as $1/s$ and thus deep linear networks preferentially learn the largest singular values of our data, with learning happening abruptly.</p>
+
+    <p>This result extends to a model with $L$ layers $f = W_L W_{L-1} \cdots W_2 W_1$, yielding</p>
+
+    $$\frac{d\sigma}{dt} \;=\; L \sigma^{2 - 2/L}(s - \sigma)$$
+
+    <p>which results again in staircase-like loss curves as different modes are suddenly learned.</p>
+
+    <!-- ==================== SECTION: NTK Review ==================== -->
+
+    <h2>Neural Tangent Kernels — A Quick Review</h2>
+
+    <p>The neural tangent kernel (NTK) describes how the function expressed by a model changes under gradient descent. This is usually more relevant to us than the raw weights. For a model $f(x; \theta)$ with parameters $\theta$ trained with mean-squared error loss, gradient flow results in the following evolution on the model outputs:</p>
+
+    $$\frac{d f(x)}{dt} \;=\; -\sum_a \Theta(x, x_a) \, r_a,$$
+
+    <p>where $r_a = f(x_a) - y_a$ is the residual on training point $a$, and</p>
+
+    $$\Theta(x, x') \;=\; \frac{\partial f(x)}{\partial \theta} \cdot \frac{\partial f(x')}{\partial \theta}^{\!\top}$$
+
+    <p>is the neural tangent kernel. Computing this quantity for all points in our training dataset allows us to understand the instantaneous evolution of the function our model describes.</p>
+
+    <p>Suppose we stack our training dataset into a vector, and obtain a vector of residuals $\vec{r} = (r_1, r_2, \ldots, r_N)$. Then the residuals decay according to the following ODE</p>
+
+    $$\frac{d \vec{r}}{dt} \;=\; -\Theta \, \vec{r},$$
+
+    <p>where we also use $\Theta$ to denote the matrix whose entries consist of the NTK evaluated on specific training data points, $\Theta_{i, k} = \Theta(x_i, x_k')$. We use $\Theta(x, x')$ with explicit arguments to denote the NTK for a pair of points, while $\Theta$ will refer to the full evolution operator.</p>
+
+    <p>For $n$ output dimensions and $N$ training data points, we have $Nn$ residual components and a $Nn \times Nn$ matrix. The eigenvalues and eigenvectors of this matrix identify directions along which the residual error decreases easily, versus directions that decrease slowly. For most neural networks the NTK is a complicated, time-varying object. However, for deep linear networks it turns out to admit a simple form.</p>
+
+    <!-- ==================== SECTION: NTK 2-Layer ==================== -->
+
+    <h2>Neural Tangent Kernel of a 2-Layer Linear Network</h2>
+
+    <p>We start with the NTK for a 2-layer linear network $f(x; \theta) = W_2 W_1 x$, where the input is $x \in \mathbb{R}^d$, the output is $f(x) \in \mathbb{R}^n$, and the hidden layer has width $m$, so that $W_1 \in \mathbb{R}^{m \times d}$ and $W_2 \in \mathbb{R}^{n \times m}$. Computing the parameter gradients yields</p>
+
+    $$\begin{aligned}
+    \Theta(x, x') \;&=\; \underbrace{\sum_{ij} \frac{\partial f(x)}{\partial (W_1)_{ij}} \, \frac{\partial f(x')}{\partial (W_1)_{ij}}^{\!\top}}_{\text{derivatives w.r.t. parameters in } W_1} \;+\; \underbrace{\sum_{ij} \frac{\partial f(x)}{\partial (W_2)_{ij}} \, \frac{\partial f(x')}{\partial (W_2)_{ij}}^{\!\top}}_{\text{derivatives w.r.t. parameters in } W_2} \\[6pt]
+    &=\; \langle x, x' \rangle \, W_2 W_2^\top \;+\; \langle W_1 x, W_1 x' \rangle \, I_n.
+    \end{aligned}$$
+
+    <p>Note that each entry of $\Theta(x, x')$ is itself an $n \times n$ matrix (representing output dimensions). For example, a deep linear network with 2D outputs:</p>
+
+    $$\Theta(x, x') = \begin{bmatrix} \langle x, x'\rangle\, \|w_2^{(1)}\|^2 + \langle W_1 x, W_1 x'\rangle & \langle x, x'\rangle\, \langle w_2^{(1)}, w_2^{(2)}\rangle \\[4pt] \langle x, x'\rangle\, \langle w_2^{(1)}, w_2^{(2)}\rangle & \langle x, x'\rangle\, \|w_2^{(2)}\|^2 + \langle W_1 x, W_1 x'\rangle \end{bmatrix}$$
+
+    <p>$w_2^{(i)} \in \mathbb{R}^m$ denotes row $i$ of $W_2 \in \mathbb{R}^{n \times m}$ — it is the vector of weights mapping the hidden layer to output $i$, so that $f_i(x) = w_2^{(i)} \cdot (W_1 x)$. The diagonal entries are special because to any output dim, only one row of $W_2$ contributes. The first and second dimensions of the output do not depend on any shared variables in $W_2$ — each weight in $W_2$ influences exactly one output dimension.</p>
+
+    <p>Below, we visualize a randomly initialized 2D output model's neural tangent kernel for a pair of 2D inputs, $x = (0, 1),\ (1, 0)$.</p>
+
+    <!-- Widget 1: Random NTK Visualization -->
+    <div class="tutorial-widget" id="w1-container">
+      <div class="tutorial-widget-controls">
+        <label style="font-size: 14px; color: #555;">model seed:</label>
+        <input type="number" id="w1-model-seed" value="0" min="0" step="1" style="width: 70px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px; margin-right: 8px;">
+        <button id="w1-toggle-details" class="sim-button" type="button">show weights</button>
+      </div>
+      <div id="w1-details" style="display: none; gap: 24px; flex-wrap: wrap; align-items: center; margin-bottom: 1em; font-size: 14px; color: #555; padding: 0.5em 0;"></div>
+      <div id="w1-ntk-matrix" style="display: flex; justify-content: center;"></div>
+      <div class="widget-caption">
+        Each cell is $\Theta(x, x')_{ij}$ — the inner product of derivatives
+        of $f$ (with respect to different output dimensions) across all
+        parameters. Cells colored by $\Theta_{ij}$ relative to the matrix max.
+        Note that the target function $y = Mx$
+        does not affect the NTK, only the residuals (which will evolve according
+        to the NTK), which is why it does not appear in the widget controls.
+      </div>
+    </div>
+
+    <p>In the analytical solution, our weights can be decomposed into the SVD basis and have equal singular values, yielding</p>
+
+    $$W_1 \;=\; O^\top \Sigma^{1/2} V^\top, \qquad W_2 \;=\; U \Sigma^{1/2} O.$$
+
+    <p>Substituting this factorization into the NTK gives</p>
+
+    $$\Theta(x, x') \;=\; \langle x, x' \rangle \, U \Sigma U^\top \;+\; (x^\top V \Sigma V^\top x') \, I_n.$$
+
+    <p>The degree of freedom in $O$ has disappeared, which makes sense since our NTK is only concerned with the functional evolution (which $O$ does not affect).</p>
+
+    <p>In the analytical solution, only $\Sigma$ evolves over training. We can thus decompose our NTK into the SVD vectors:</p>
+
+    $$U \Sigma U^\top \;=\; \sum_i s_i(t) \, u_i u_i^\top, \qquad V \Sigma V^\top \;=\; \sum_i s_i(t) \, v_i v_i^\top,$$
+    $$\implies \Theta(x, x') \;=\; \sum_i s_i(t) \left[\, \langle x, x' \rangle \, u_i u_i^\top \;+\; (v_i^\top x)(v_i^\top x') \, I_n \,\right] \;=\; \sum_i s_i(t) \, K_i(x, x').$$
+
+    <p>The NTK is thus a sum of time-independent kernels $K_i$, each weighted by a singular value $s_i(t)$ that follows the staircase dynamics from the previous section.</p>
+
+    <p>We visualize the NTK and its time-evolution along the analytic trajectory below. Slide $t$ to watch the NTK at successive snapshots — its entries change in magnitude, but the eigenbasis is fixed.</p>
+
+    <!-- Widget 2: NTK Time Evolution -->
+    <div class="tutorial-widget" id="w3-container">
+      <p style="color: #555; margin-top: 0; margin-bottom: 1.5em; font-size: 15px;">
+        Time evolution of the NTK along the analytic trajectory. Specify the
+        target singular values $s_1, s_2$ and a basis seed for $U, V$. The
+        model's singular values evolve from $\sigma_0 = 0.001$ according to
+        $\sigma_i(t) = s_i / \big(1 + (s_i/\sigma_0 - 1) e^{-2 s_i t}\big)$.
+      </p>
+
+      <div style="margin-bottom: 1em;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <label for="w3-t-slider" style="font-size: 14px; color: #555; min-width: 30px;">$t$:</label>
+          <input type="range" id="w3-t-slider" min="0" max="1000" value="0" step="1" style="flex: 1;">
+          <span id="w3-t-display" style="font-size: 13px; color: #888; min-width: 50px; text-align: right;"></span>
+        </div>
+      </div>
+
+      <div class="tutorial-widget-controls">
+        <label style="font-size: 14px; color: #555;">$s_1$:</label>
+        <input type="number" id="w3-s1" value="1.0" step="0.1" min="0" style="width: 70px; font-size: 13px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; margin-right: 16px;">
+        <label style="font-size: 14px; color: #555;">$s_2$:</label>
+        <input type="number" id="w3-s2" value="0.4" step="0.1" min="0" style="width: 70px; font-size: 13px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; margin-right: 16px;">
+        <label style="font-size: 14px; color: #555;">basis seed:</label>
+        <input type="number" id="w3-basis-seed" value="0" min="0" step="1" style="width: 70px; font-size: 13px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; margin-right: 8px;">
+        <button id="w3-toggle-details" class="sim-button" type="button">show weights</button>
+      </div>
+
+      <div id="w3-details" style="display: none; gap: 24px; flex-wrap: wrap; align-items: center; margin-bottom: 1em; font-size: 14px; color: #555; padding: 0.5em 0;"></div>
+
+      <div style="display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap;">
+        <div id="w3-ntk-matrix" style="display: flex; align-items: center; justify-content: center;"></div>
+        <div style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+          <div style="position: relative; height: 160px;">
+            <canvas id="w3-sigma-plot" style="display: block; width: 100%; height: 100%; border: 1px solid #ccc; border-radius: 4px; background: #fff;"></canvas>
+          </div>
+          <div style="position: relative; height: 160px;">
+            <canvas id="w3-loss-plot" style="display: block; width: 100%; height: 100%; border: 1px solid #ccc; border-radius: 4px; background: #fff;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="widget-caption">
+        Each cell is $\Theta(x, x')_{ij}$ at the current $t$, computed from the
+        analytic snapshot model. Cells colored relative to the matrix max.
+        Right: singular values $\sigma_i(t)$ (top) and training loss (bottom)
+        evolving along the analytic trajectory.
+      </div>
+    </div>
+
+    <!-- ==================== SECTION: Eigenvectors ==================== -->
+
+    <h2>Eigenvectors and Eigenvalues</h2>
+
+    <p>We want the eigenvectors and eigenvalues of $\Theta(t)$. Since $\Theta(t) = \sum_i s_i(t) K_i$, if all $K_i$ share a common eigenbasis, then $\Theta(t)$ has the same eigenbasis at all times, and only its eigenvalues evolve.</p>
+
+    <p>Stack the residuals into a vector indexed by $(a, j)$ for data point $a$ and output dimension $j$. Each $K_i$ is an $Nn \times Nn$ matrix, and naturally splits into a piece acting on the data-point index and a piece acting on the output-dimension index (see our earlier explicit matrix as an example, where the output dimensions and data dimensions result in a nice block structure). This structure is captured by the Kronecker product:</p>
+
+    $$A \otimes B \;=\; \begin{bmatrix} A_{11} B & A_{12} B & \cdots \\ A_{21} B & A_{22} B & \cdots \\ \vdots & & \ddots \end{bmatrix}$$
+
+    <p>We can decompose $K$ into a sum of two Kronecker products:</p>
+
+    $$[K_i]^{(1)} \;=\; G \otimes u_i u_i^\top, \qquad [K_i]^{(2)} \;=\; H_i \otimes I_n,$$
+
+    <p>with $G_{ab} = \langle x_a, x_b \rangle$ and $(H_i)_{ab} = (v_i^\top x_a)(v_i^\top x_b)$. $G$ is an inner product over data points, while $H_i$ is an inner product where data points are first projected along the $i$th singular direction of $M$.</p>
+
+    <p>A useful property of Kronecker products is that if $A$ has eigenvector $u$ with eigenvalue $\alpha$ and $B$ has eigenvector $v$ with eigenvalue $\beta$, then $A \otimes B$ has eigenvector $u \otimes v$ with eigenvalue $\alpha \beta$. So for the $K_i$ to share an eigenbasis, we need:</p>
+
+    <ul style="margin-left: 1.5em;">
+      <li>$G, H_1, H_2, \ldots$ to share an eigenbasis on the data-point side.</li>
+      <li>$u_1 u_1^\top, u_2 u_2^\top, \ldots, I_n$ to share an eigenbasis on the output-dimension side.</li>
+    </ul>
+
+    <p>The output-dimension condition is free: the $u_i$ are orthonormal (left singular vectors of $M$). For the data-point condition, consider the projection of all data points onto a given singular vector $v_i$: $\mathbf{p}_i \in \mathbb{R}^N$ where $(\mathbf{p}_i)_a = v_i^\top x_a$. Then $H_i = \mathbf{p}_i \mathbf{p}_i^\top$ is rank 1, and whitened inputs imply that $\{\mathbf{p}_i\}$ are orthonormal:</p>
+
+    $$\mathbf{p}_i^\top \mathbf{p}_j \;=\; v_i^\top \!\left(\sum_a x_a x_a^\top\right)\! v_j \;=\; v_i^\top v_j \;=\; \delta_{ij}.$$
+
+    <p>Thus the $\{\mathbf{p}_i\}$ form a shared eigenbasis for $H_i$ (each $H_i$ has $\mathbf{p}_i$ as its only nonzero eigenvector). Furthermore $G = \sum_i H_i$, since the $v_i$ form an orthonormal basis and projecting along each component before the inner product yields the direct inner product $\sum_i (v_i^\top x_a)(v_i^\top x_b) = \langle x_a, x_b \rangle$. Thus $G$ is diagonal in the same basis of eigenvectors.</p>
+
+    <p>Therefore all $K_i$ share the eigenbasis $\{\mathbf{p}_k \otimes u_i\}$. The corresponding eigenvalues are straightforward to compute:</p>
+
+    $$\begin{aligned}
+    K_j (\mathbf{p}_k \otimes u_i)
+    &= (G \otimes u_j u_j^\top)(\mathbf{p}_k \otimes u_i) \;+\; (H_j \otimes I_n)(\mathbf{p}_k \otimes u_i) \\
+    &= (G \mathbf{p}_k) \otimes (u_j u_j^\top u_i) \;+\; (H_j \mathbf{p}_k) \otimes u_i \\
+    &= \mathbf{p}_k \otimes \delta_{ji} u_i \;+\; \delta_{jk} \mathbf{p}_k \otimes u_i \\
+    &= (\delta_{ji} + \delta_{jk}) \, \mathbf{p}_k \otimes u_i.
+    \end{aligned}$$
+
+    <p>The third line uses $u_j^\top u_i = \delta_{ji}$ (orthonormality of the left singular vectors), $G \mathbf{p}_k = \mathbf{p}_k$ (since $G$ acts as the identity on the $\mathbf{p}_k$ subspace, and $H_j \mathbf{p}_k = \delta_{jk} \mathbf{p}_k$. Summing over all the $K_j$ with the time-dependent weights $s_j(t)$ gives the NTK eigenvalue:</p>
+
+    $$\Theta(t) \, (\mathbf{p}_k \otimes u_i) \;=\; \big( s_k(t) + s_i(t) \big) \, (\mathbf{p}_k \otimes u_i).$$
+
+    <p>Each NTK eigenvalue is the sum of two singular values.</p>
+
+    <!-- ==================== SECTION: Interpreting Eigenvalues ==================== -->
+
+    <h2>Interpreting The Eigenvalues</h2>
+
+    <p>The analytic solution involves each singular mode evolving independently. Yet our eigenvalue formula $s_k(t) + s_i(t)$ allows for interactions between different singular values. To understand what's going on, we need to understand what the eigenvectors $\mathbf{p}_k \otimes u_i$ actually represent.</p>
+
+    <p>The dot product $\vec{r} \cdot (\mathbf{p}_k \otimes u_i)$ quantifies how much of the residual error is aligned with the eigenvector $\mathbf{p}_k \otimes u_i$. We can compute it explicitly:</p>
+
+    $$\vec{r} \cdot (\mathbf{p}_k \otimes u_i) \;=\; \sum_a v_k^\top x_a \,(u_i^\top r_{a})$$
+
+    <p>This amounts to projecting the residual onto output direction $u_i$, projecting the input onto input direction $v_k$, and taking a weighted sum over data points. A given eigenvector describes how the error aligns with a given $u_i$ and how much the input aligns with a given $v_k$.</p>
+
+    <p>Suppose we have a cross-term, $\mathbf{p}_k \otimes u_i$ when $k \neq i$. The residual for our analytic assumptions is given by $r_a = f(x_a) - y_a = (U \Sigma(t) V^\top - U \Sigma_0 V^\top) x_a$. Plugging this in yields:</p>
+
+    $$\begin{aligned}
+    \vec{r} \cdot (\mathbf{p}_k \otimes u_i) \;&=\; \sum_a v_k^\top x_a \, \big(u_i^\top U (\Sigma(t) - \Sigma_0) V^\top x_a\big) \\
+    &=\; (s_i(t) - s_i^0) \sum_a (v_k^\top x_a)(v_i^\top x_a) \\
+    &=\; (s_i(t) - s_i^0) \, v_k^\top \!\left(\sum_a x_a x_a^\top\right)\! v_i \\
+    &=\; (s_i(t) - s_i^0) \, \delta_{ki}.
+    \end{aligned}$$
+
+    <p>The second line uses the fact that $u_i^\top U$ picks out the $i$-th row of $U^\top U = I$, and that $\Sigma(t) - \Sigma_0$ is diagonal, leaving only the $i$-th singular value gap $s_i(t) - s_i^0$. The third and fourth lines use whitening $\sum_a x_a x_a^\top = I$ along with orthonormality of the $v_i$.</p>
+
+    <p>This shows that cross-term eigenvectors always have zero residual. This makes intuitive sense: the SVD pairs each input direction $v_i$ with output direction $u_i$, so an input aligned with $v_k$ produces a target aligned with $u_k$, not $u_i$. The cross-term eigenvector $\mathbf{p}_k \otimes u_i$ asks about error along an output direction that behaves independent of inputs along $v_k$, so its residual is zero. The only NTK eigenvectors with nonzero residual are those where $i = k$:</p>
+
+    $$\Theta(t) \, (\mathbf{p}_i \otimes u_i) \;= 2 s_i(t) \,(\mathbf{p}_i \otimes u_i).$$
+
+    <p>We visualize the eigenvalue structure and residual projections in the widget below.</p>
+
+    <!-- Widget 3: Eigenstructure -->
+    <div class="tutorial-widget" id="w4-container">
+      <p style="color: #555; margin-top: 0; margin-bottom: 1.5em; font-size: 15px;">
+        Eigenstructure of the NTK along the analytic trajectory. The bar charts show
+        each NTK eigenvalue $\lambda_\alpha$ (left) and the magnitude of the
+        residual projected onto each eigenvector $|\vec{r} \cdot e_\alpha|$ (right).
+        Notice which residual components stay pinned at zero throughout — these
+        are the cross-term eigenvectors.
+      </p>
+
+      <div style="margin-bottom: 1em;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <label for="w4-t-slider" style="font-size: 14px; color: #555; min-width: 30px;">$t$:</label>
+          <input type="range" id="w4-t-slider" min="0" max="1000" value="0" step="1" style="flex: 1;">
+          <span id="w4-t-display" style="font-size: 13px; color: #888; min-width: 50px; text-align: right;"></span>
+        </div>
+      </div>
+
+      <div class="tutorial-widget-controls">
+        <label style="font-size: 14px; color: #555;">$s_1$:</label>
+        <input type="number" id="w4-s1" value="1.0" step="0.1" min="0" style="width: 70px; font-size: 13px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; margin-right: 16px;">
+        <label style="font-size: 14px; color: #555;">$s_2$:</label>
+        <input type="number" id="w4-s2" value="0.4" step="0.1" min="0" style="width: 70px; font-size: 13px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; margin-right: 16px;">
+        <label style="font-size: 14px; color: #555;">basis seed:</label>
+        <input type="number" id="w4-basis-seed" value="0" min="0" step="1" style="width: 70px; font-size: 13px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 3px; margin-right: 8px;">
+      </div>
+
+      <div style="display: flex; gap: 16px; height: 280px; margin-top: 1em;">
+        <div style="position: relative; flex: 1; min-height: 0;">
+          <canvas id="w4-eig-bars" style="display: block; width: 100%; height: 100%; border: 1px solid #ccc; border-radius: 4px; background: #fff;"></canvas>
+        </div>
+        <div style="position: relative; flex: 1; min-height: 0;">
+          <canvas id="w4-resid-bars" style="display: block; width: 100%; height: 100%; border: 1px solid #ccc; border-radius: 4px; background: #fff;"></canvas>
+        </div>
+      </div>
+
+      <div class="widget-caption">
+        Same color in both panels indicates the same eigenvector.
+        Only the <em>aligned</em> modes ($k = i$) carry nonzero residual.
+      </div>
+    </div>
+
+    <!-- ==================== SECTION: Counting Eigenvectors ==================== -->
+
+    <h2>Counting the Eigenvectors</h2>
+
+    <p>Up until now, we have focused on a small subset of NTK eigenvectors. For a matrix $M$ with $r$ nonzero singular values, there will be $r$ associated eigenvectors $u_i, v_k$. This gives at most $r^2$ eigenvectors $\mathbf{p}_k \otimes u_i$, but our NTK is a matrix with $Nn$ eigenvectors (note $n \geq r$). There are two parts to the resolution of this paradox:</p>
+
+    <ul style="margin-left: 1.5em;">
+      <li>If $r < n$, then there are still $n$ eigenvectors $u_i, v_k$, just with 0 eigenvalues.</li>
+      <li>We focused on the $\mathbf{p}_k$ eigenvectors given by dot products between our inputs and $v_k$. However, there are $N - r$ additional $\mathbf{p}_k$ eigenvectors that lie in the common null space of our data side matrices $G, H_1, H_2, \ldots$, and any eigenvector formed with these has eigenvalue 0.</li>
+    </ul>
+
+    <p>To understand the latter, consider $N$ input vectors $(x_1, x_2), (x_1, x_2), ... (x_1, x_2)$. Although this technically comprises $N$ inputs, there are a limited number of resulting vectors you can obtain by projecting the inputs onto a set of vectors, since they all yield the same value. </p>
+
+    <p>These extra $\mathbf{p}_k$ eigenvectors not obtained from $v_k$ lie in the common null space of our data side matrices $G, H_1, H_2, ...$. Any eigenvector formed with these $\mathbf{p}_k$ has an eigenvalue of 0.</p>
+
+    <p>With this in mind, we can break our eigenvectors $\mathbf{p}_k \otimes u_i$ (including the 0 eigenvalue $u_i$ and the extra $\mathbf{p}_k$ vectors) into four cases. To simplify things, we'll assume we have more data points than the rank $r$ of $M$</p>
+
+    <ul style="margin-left: 1.5em;">
+      <li><strong>Aligned modes</strong> ($k = i \leq r$): eigenvalue $2s_i(t)$. There are $r$ of these, one per nonzero singular value of $M$. As shown above, these are the only modes that carry residual error during training.</li>
+      <li><strong>Cross modes</strong> ($k \neq i$, both $\leq r$): eigenvalue $s_k(t) + s_i(t)$. There are $r(r-1)$ of these. Whitened inputs force their residual to zero, so although they have nonzero eigenvalues, they sit idle during training.</li>
+      <li><strong>Low-rank $M$ modes</strong>: if $M$ has rank $r < n$, there are $(n-r)r$ eigenvectors with eigenvalue $s_k(t)$ — half the value of the corresponding aligned mode.</li>
+      <li><strong>Extra data modes</strong>: for all the $\mathbf{p}_k$ directions in the null space of the data side matrices, eigenvalue 0. There are $(N-r)n$ of these.</li>
+    </ul>
+
+    <p>The counts add up:</p>
+
+    $$\underbrace{r}_{\text{aligned}} + \underbrace{r(r-1)}_{\text{cross}} + \underbrace{(n - r) r}_{\text{low-rank}} + \underbrace{(N - r) n}_{\text{extra data}} \;=\; Nn.$$
+
+    <!-- ==================== SECTION: NTK-Hessian ==================== -->
+
+    <h2>NTK–Hessian Relationship</h2>
+
+    <p>The NTK lets us approximate the eigenvalues of the Hessian. For MSE loss the Hessian is</p>
+
+    $$H \;=\; \underbrace{\sum_a \frac{\partial f(x_a)}{\partial \theta}^{\!\top} \frac{\partial f(x_a)}{\partial \theta}}_{H_{\text{GN}}} \;+\; \underbrace{\sum_a r_a \cdot \frac{\partial^2 f(x_a)}{\partial \theta^2}}_{\text{residual term}},$$
+
+    <p>where the first piece is the \emph{Gauss-Newton} (GN) term and the second is weighted by the residuals $r_a = f(x_a) - y_a$. At convergence the residuals vanish, so $H \to H_{\text{GN}}$ exactly. We will ignore the residual term for now and analyze the sharpness through $H_{\text{GN}}$ alone.</p>
+
+    <p>The GN term and the NTK are related by the Jacobian 
+      
+    $$
+    J_{(a, j),\, \alpha} \;=\; \frac{\partial f_j(x_a)}{\partial \theta_\alpha},
+    $$
+
+    <p>a matrix of shape $Nn \times p$, where $p$ is the number of parameters. An entry describes how an element of the output dimension $n$ changes as a parameter in $p$ is varied, for the input data point (part of $N$). The Jacobian relates the Hessian (GN) and the NTK:</p>
+      
+    $$H_{\text{GN}} \;=\; J^\top J, \qquad \Theta \;=\; J J^\top.$$
+
+    <p>This also implies that the two matrices share the same nonzero eigenvalues, with eigenvectors related by $J^\top$. If $\Theta v = \lambda v$ with $\lambda > 0$, then</p>
+
+    $$H_{\text{GN}} (J^\top v) \;=\; J^\top J J^\top v \;=\; J^\top \Theta v \;=\; \lambda \, (J^\top v),$$
+
+    <p>so $J^\top v$ is an eigenvector of $H_{\text{GN}}$ with the same eigenvalue.</p>
+
+    <!-- ==================== SECTION: Deep Linear Sharpness ==================== -->
+
+    <h2>Deep Linear Sharpness (GN)</h2>
+
+    <p>The NTK results immediately tell us the Hessian eigenvalues are the sums of pairs of singular values: $s_k(t) + s_i(t)$. This implies that the <strong>sharpness</strong> (largest Hessian eigenvalue) is $2s_{\max}(t)$ at convergence, where $s_{\max}$ is the largest singular value of $M$. It also implies that eigenvalues undergo staircase-like changes as singular values turn on.</p>
+
+    <p>The widget below trains a 2-layer linear network with full-batch gradient descent and overlays the analytic prediction. Vary the initialization (random small weights vs. exact SVD basis) and input distribution (whitened vs. Gaussian) to see where the theory gives a full dynamical match versus only end-of-training agreement.</p>
+
+      <div class="tutorial-widget">
+
+        <!-- TASK panel -->
+        <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+          <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+
+          <div style="margin-left: 60px;">
+
+            <!-- Input mode -->
+            <div class="inline-row" style="margin-bottom: 0.7em; gap: 18px;">
+              <span style="font-size: 14px; color: #555;">Inputs:</span>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw1-inputMode" id="tw1-inputModeWhitened" value="whitened">
+                Whitened (exact $\Sigma_x = I$)
+              </label>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw1-inputMode" id="tw1-inputModeGaussian" value="gaussian">
+                iid Gaussian $\mathcal{N}(0, I)$
+              </label>
+            </div>
+            <div id="tw1-inputModeWarning" style="font-size: 12px; color: #aa4444; margin-bottom: 0.7em; display: none;"></div>
+
+            <!-- Data params -->
+            <div id="tw1-dataParamsContainer" class="inline-row" style="margin-bottom: 1em;"></div>
+
+            <!-- Init mode -->
+            <div class="inline-row" style="margin-bottom: 1em; gap: 18px;">
+              <span style="font-size: 14px; color: #555;">Initialization:</span>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw1-initMode" id="tw1-initModeRandom" value="random">
+                Random Gaussian
+              </label>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw1-initMode" id="tw1-initModeAligned" value="aligned">
+                Aligned to SVD basis
+              </label>
+            </div>
+
+            <!-- Collapsible toggle buttons -->
+            <div style="display: flex; gap: 0.6em; flex-wrap: wrap; margin-bottom: 0.2em;">
+              <button id="tw1-toggleModelDetailsButton" class="sim-button" type="button">show model details</button>
+              <button id="tw1-toggleFunctionDetailsButton" class="sim-button" type="button">show function details</button>
+            </div>
+
+            <!-- Model details panel -->
+            <div id="tw1-modelDetailsPanel" class="details-panel task-details">
+              <div style="display: flex; gap: 2em; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1.2em;">
+
+                <!-- Hidden dim 1 only — no layer toggles -->
+                <div style="text-align: center;">
+                  <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim</div>
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                    <input type="range" id="tw1-hiddenDim1Slider" min="1" max="200" value="30" style="width: 120px;">
+                    <span id="tw1-hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">30</span>
+                  </div>
+                </div>
+
+                <!-- Model seed -->
+                <div style="text-align: center;">
+                  <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                    <input type="number" id="tw1-modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Random O row (aligned init only) -->
+              <div id="tw1-randomORow" class="inline-row" style="margin-bottom: 1em; display: none;">
+                <label class="inline-field" style="font-size: 14px;">
+                  <input type="checkbox" id="tw1-randomOCheckbox">
+                  Random orthogonal matrices $O$ (otherwise $O = I$)
+                </label>
+              </div>
+
+              <div id="tw1-weightCaption" style="font-size: 12px; color: #999;">
+                Weights: $W_{ij}^{(\ell)} \sim \mathcal{N}(0,\, \varepsilon^2/n_{\ell-1})$
+              </div>
+            </div>
+
+            <!-- Function details panel -->
+            <div id="tw1-functionDetailsPanel" class="details-panel task-details">
+              <div style="font-size: 15px; color: #666; margin-bottom: 10px;">
+                Ground Truth Matrix $W^\star$
+              </div>
+              <div id="tw1-dimInputs" class="inline-row" style="margin-bottom: 12px;"></div>
+              <div style="font-size: 14px; color: #666; margin-bottom: 6px;">
+                Singular Values $\sigma_m$ <span style="font-size: 12px; color: #999;">— Type any value</span>
+              </div>
+              <div id="tw1-svEditor" class="sv-editor"></div>
+              <div id="tw1-svWarning" class="sv-warning"></div>
+              <div id="tw1-basisOptions" class="inline-row" style="margin-top: 14px;"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- TRAINING panel -->
+        <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+          <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+          <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <span style="font-size: 16px;">$\eta$:</span>
+                <input type="range" id="tw1-etaSlider" min="0" max="100" value="50" style="width: 120px;">
+                <span id="tw1-etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.6</span>
+              </div>
+            </div>
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">init scale $\varepsilon$</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="range" id="tw1-initScaleSlider" min="0" max="100" value="50" style="width: 120px;">
+                <input type="number" id="tw1-initScaleNumber" min="0" step="any" value="0.01" style="width: 80px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px;">
+              </div>
+              <div style="font-size: 11px; color: #999; margin-top: 4px;">slider 0.0001–1; type any value</div>
+            </div>
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+              <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2N}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+              <div style="font-size: 12px; margin-top: 4px; color: #999;">full-batch ($|B| = N$)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SIMULATION -->
+        <hr style="border: none; border-top: 2px solid #ccc; margin-bottom: 0.2em;">
+        <div class="section-label">SIMULATION</div>
+
+        <div style="margin-top: 1em; margin-bottom: 1em;">
+          <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+            <button id="tw1-startPauseButton" class="sim-button">start</button>
+            <button id="tw1-resetButton" class="sim-button">reset</button>
+          </div>
+
+          <div class="plots-container">
+            <div class="plot-wrapper">
+              <div class="plot-box">
+                <div class="plot-content">
+                  <canvas id="tw1-lossChart" class="plot-canvas"></canvas>
+                  <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+                  <div class="x-axis-label">step</div>
+                </div>
+              </div>
+            </div>
+            <div class="plot-wrapper">
+              <div class="plot-box">
+                <div class="plot-content">
+                  <canvas id="tw1-rightChart" class="plot-canvas"></canvas>
+                  <div class="y-axis-label y-axis-label-norms">sharpness</div>
+                  <div class="x-axis-label">step</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 1em; text-align: center; color: #666; font-size: 14px;">
+            <label>steps/sec:</label>
+            <span id="tw1-stepsPerSec" style="font-weight: bold;">—</span>
+          </div>
+        </div>
+
+        <p class="widget-caption">Single hidden layer (2-layer linear network). The dotted curves overlay the analytic prediction $L\,s_{\max}(t)^{2(L-1)/L} = 2 s_{\max}(t)$.</p>
+      </div><!-- /training widget: 2-layer -->
+
+    <p>The analytic solution used three assumptions:</p>
+    <ul style="margin-left: 1.5em;">
+      <li>We model gradient descent via gradient flow.</li>
+      <li>We assume our inputs are whitened.</li>
+      <li>We assume that our model quickly aligns into the SVD basis, and assumes a balanced initialization.</li>
+    </ul>
+
+    <p>Our default settings are chosen to minimize these issues. There, we find that our theoretical prediction (made from the model at initialization) closely predicts the loss curve and the final sharpness values. We observe unusual behaviour at initialization where the sharpness is initially high and decreases, and discrepancies between our theory and the actual sharpness.</p>
+
+    <p>Particularly interesting is that our theory predicts there will be a pair of eigenvectors with the same eigenvalue for the second highest mode (consider $\lambda(t) = s_i(t) + s_k(t)$ with swapped indices). However, in practice our residual seems to split these two identical eigenvalues.</p>
+
+    <p>We can also relax our assumptions:</p>
+
+    <ul style="margin-left: 1.5em;">
+      <li>Large learning rates result in inaccurate estimates of the timing of the staircase-like learning, but relatively little effect on final sharpness.</li>
+      <li>Non-whitened inputs have a dramatic effect in changing the final sharpness values and the timing of curves, regardless of learning rate or alignment.</li>
+      <li>Surprisingly, starting out in the singular value basis doesn't matter much as long as our initialization is very small — the model seems to very quickly find the correct singular values.</li>
+    </ul>
+
+    <p>We thus find NTK theory accurately predicts end sharpness when we have whitened inputs, but a fully dynamical theory of sharpness requires understanding the residual.</p>
+
+    <p class="tutorial-note"><strong>Note:</strong> The residual for the 2-layer case is special. Our function is a sum of terms $f(x) = \sum w_{1i} w_{2j} x$, and even for small weights, two derivatives can cancel out terms and result in a large finite residual contribution. This does not occur with more layers because two derivatives still leave $w_{3k} w_{4l} \ldots$ terms, and for small initialization the residual effects will shrink with depth. Thus we first consider the high-depth case.</p>
+
+    <!-- ==================== SECTION: More Layers ==================== -->
+
+    <h2>More Layers</h2>
+
+    <p>For a depth-$L$ linear network $f(x;\theta) = W_L W_{L-1} \cdots W_1 x$, much of the 2-layer analysis applies with additional steps to account for extra layers. With $L$ layers, we have $L$ terms in the NTK, but the same ideas carry through: the NTK factors as a sum of time-independent kernels weighted by time-dependent singular values, and the $\mathbf{p}_k \otimes u_i$ vectors remain a common eigenbasis.</p>
+
+    <details class="accordion">
+      <summary>Derivation for Multiple Layers</summary>
+      <div class="accordion-body">
+        <p>An important quantity in the neural tangent kernel is the derivative of the function with respect to a specific weight matrix. This is given by</p>
+
+        $$\frac{\partial f(x)}{\partial W_\ell} = \underbrace{(W_L \cdots W_{\ell+1})}_{\text{call this } A} \underbrace{(W_{\ell-1} \cdots W_1)\, x}_{\text{call this } z}$$
+
+        <p>where $A$ is a matrix on the output side and $z$ is a vector living in the input space of $W_\ell$. The derivative with respect to a specific element of $W_\ell$ is</p>
+
+        $$\frac{\partial f(x)}{\partial (W_\ell)_{ij}} = A_{:,i} \, z_j$$
+
+        <p>where $A_{:,i}$ is the $i$-th column of $A$, which is a vector (one entry per output dimension of $f$), and $z_j$ is just a scalar — the $j$-th entry of $z$. So the derivative with respect to a single scalar entry $(W_\ell)_{ij}$ is a vector in output space, scaled by $z_j$.</p>
+
+        <p>The NTK is the inner product of two gradients evaluated at $x$ and $x'$. Its contributions from the derivatives with respect to the entries of $W_\ell$ are:</p>
+
+        $$\sum_{i,j} \frac{\partial f(x)}{\partial (W_\ell)_{ij}} \frac{\partial f(x')}{\partial (W_\ell)_{ij}}^{\!\top} = \underbrace{\left(\sum_j z_j z'_j\right)}_{\text{scalar: } \langle z, z'\rangle} \cdot \underbrace{\left(\sum_i A_{:,i}\, A_{:,i}^\top\right)}_{\text{matrix: } A A^\top}$$
+
+        <p>This is where the two sides on opposite ends of the derivative behave differently. The part below the layer is a vector that shows up as an inner product $\langle z, z'\rangle$, while the part above is a matrix that shows up as an outer-product-style contraction $A A^\top$. This matches how the NTK is a matrix relating pairs of output dimensions — for more details, see our original 2D example.</p>
+
+        <p>The full NTK is the sum of these per-layer contributions:</p>
+
+        $$\Theta(x, x') = \sum_{\ell=1}^{L} \langle z_\ell, z'_\ell\rangle \cdot A_\ell A_\ell^\top$$
+
+        <p>where $z_\ell = W_{\ell-1} \cdots W_1\, x$ is the activation feeding into layer $\ell$ and $A_\ell = W_L \cdots W_{\ell+1}$ is the product of layers above it, with the conventions $z_1 = x$ and $A_L = I_n$.</p>
+
+        <p>Writing out the $L$ terms explicitly:</p>
+
+        $$\Theta(x, x') = \underbrace{\langle x, x'\rangle \cdot (W_L \cdots W_2)(W_L \cdots W_2)^\top}_{\ell = 1}\;+\;\underbrace{\langle W_1 x, W_1 x'\rangle \cdot (W_L \cdots W_3)(W_L \cdots W_3)^\top}_{\ell = 2}$$
+
+        $$+\;\underbrace{\langle W_2 W_1 x,\, W_2 W_1 x'\rangle \cdot (W_L \cdots W_4)(W_L \cdots W_4)^\top}_{\ell = 3}\;+\;\cdots\;+\;\underbrace{\langle W_{L-1} \cdots W_1\, x,\; W_{L-1} \cdots W_1\, x'\rangle \cdot I_n}_{\ell = L}$$
+
+        <p>Each term consists of a data-side scalar $\langle z_\ell, z'_\ell\rangle$ times an output-side matrix $A_\ell A_\ell^\top$. For $\ell = 1$ nothing is below, so $z_1 = x$; at $\ell = L$ nothing is above, so $A_L = I_n$.</p>
+
+        <h3>Balanced Solution</h3>
+
+        <p>Assuming we lie in the SVD basis of the original teacher matrix $M$, and that the layers are balanced, we have:</p>
+
+        $$W_1 = O_1^\top \Sigma^{1/L} V^\top, \qquad W_\ell = O_\ell^\top \Sigma^{1/L} O_{\ell-1} \;(1 < \ell < L), \qquad W_L = U \Sigma^{1/L} O_{L-1},$$
+
+        <p>so each layer carries an equal share $\Sigma^{1/L}$ of the singular structure, with the orthogonal matrices $O_\ell$ representing gauge freedom between hidden layers (the same kind of rotation freedom we saw at depth 2, just with one $O$ per hidden layer).</p>
+
+        <p>Plugging this into $\langle z_\ell, z'_\ell\rangle$ yields</p>
+
+        $$\langle z_\ell, z'_\ell\rangle = x^\top V\, \Sigma^{2(\ell-1)/L}\, V^\top x'.$$
+
+        <p>And $A_\ell A_\ell^\top$ becomes</p>
+
+        $$A_\ell A_\ell^\top = U\, \Sigma^{2(L-\ell)/L}\, U^\top.$$
+
+        <p>The per-layer NTK contribution is therefore</p>
+
+        $$\Theta^{(\ell)}(x, x') = (x^\top V\, \Sigma^{2(\ell-1)/L}\, V^\top x')\; U\, \Sigma^{2(L-\ell)/L}\, U^\top,$$
+
+        <p>and summing over layers gives the full NTK:</p>
+
+        $$\Theta(x, x') = \sum_{\ell=1}^{L} (x^\top V\, \Sigma^{2(\ell-1)/L}\, V^\top x')\; U\, \Sigma^{2(L-\ell)/L}\, U^\top.$$
+
+        <h3>Time Dependent Decomposition</h3>
+
+        <p>Just like the 2-layer case, we decompose this into a sum of time-independent matrices, weighted by the time-dependent singular value evolutions. We expand $\Sigma^{2(\ell-1)/L}$ and $\Sigma^{2(L-\ell)/L}$ in the singular value basis:</p>
+
+        $$V \Sigma^{2(\ell-1)/L} V^\top = \sum_k s_k(t)^{2(\ell-1)/L}\, v_k v_k^\top, \qquad U \Sigma^{2(L-\ell)/L} U^\top = \sum_i s_i(t)^{2(L-\ell)/L}\, u_i u_i^\top.$$
+
+        <p>Substituting into $\Theta^{(\ell)}$ and pulling the sums out:</p>
+
+        $$\Theta^{(\ell)}(x, x') = \sum_{k, i} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\; (v_k^\top x)(v_k^\top x')\, u_i u_i^\top.$$
+
+        <p>Now sum over layers $\ell$ to get the full NTK. Note that the matrices $(v_k^\top x)(v_k^\top x')\, u_i u_i^\top$ do not depend on $\ell$, only the singular values:</p>
+
+        $$\begin{aligned}
+        \Theta(x, x') &= \sum_{\ell = 1}^{L} \sum_{k, i} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\; (v_k^\top x)(v_k^\top x')\, u_i u_i^\top \\
+        &= \sum_{k, i} c_{ki}(t)\, (v_k^\top x)(v_k^\top x')\, u_i u_i^\top \\
+        &= \sum_{k, i} c_{ki}(t)\, K_{ki}(x, x'),
+        \end{aligned}$$
+
+        <p>where we have the time-dependent coefficients</p>
+
+        $$c_{ki}(t) := \sum_{\ell=1}^{L} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}$$
+
+        <p>and the time-independent matrices</p>
+
+        $$K_{ki}(x, x') := (v_k^\top x)(v_k^\top x')\, u_i u_i^\top.$$
+
+        <p>This is the depth-$L$ analog of our earlier $\Theta = \sum_i s_i(t)\, K_i$ decomposition. However there we only needed a single index. Here we need two indices — previously we were allowed to contract certain terms because they didn't have a corresponding singular value attached. Specifically, our old factorization was</p>
+
+        $$K_i(x, x') = \langle x, x'\rangle\, u_i u_i^\top + (v_i^\top x)(v_i^\top x')\, I_n,$$
+
+        <p>where the identity matrix appeared in the second piece. But the identity is $\sum_k u_k u_k^\top$ (since the $u_k$ are an orthonormal basis), and similarly $\langle x, x'\rangle = \sum_k (v_k^\top x)(v_k^\top x')$ (assuming whitened inputs). So our old factorization was actually</p>
+
+        $$K_i = \sum_{k} (v_k^\top x)(v_k^\top x')\, u_i u_i^\top + \sum_{k} (v_i^\top x)(v_i^\top x')\, u_k u_k^\top.$$
+
+        <p>This term could be simplified by summing over the other index. These summations can't be taken anymore in the higher-depth case, since the additional index is coupled with a singular value in $c_{ki}$. Previously for $L = 2$ we could freely sum because each $K_i$ was only related to a single singular value.</p>
+
+        <h3>Eigenvectors</h3>
+
+        <p>We are interested in the eigenvectors of the matrices</p>
+
+        $$K_{ki}(x, x') := (v_k^\top x)(v_k^\top x')\, u_i u_i^\top.$$
+
+        <p>Note this matrix can be cleanly divided into a part that depends only on the data points $x, x'$, multiplying the matrix $u_i u_i^\top$ which depends only on $i$. This is ideal for factoring into a Kronecker product of the form</p>
+
+        $$K_{ki} = G_k \otimes u_i u_i^\top, \qquad G_k = \mathbf{p}_k \mathbf{p}_k^\top \;\text{ with }\; (\mathbf{p}_k)_a = v_k^\top x_a.$$
+
+        <p>Thus $K_{ki} = (\mathbf{p}_k \mathbf{p}_k^\top) \otimes (u_i u_i^\top)$, whose nonzero eigenvector is $\mathbf{p}_k \otimes u_i$ with eigenvalue $1$. Just like the 2-layer case, the eigenvectors of the NTK (formed by time-dependent sums of $K_{ki}$) are $\mathbf{p}_k \otimes u_i$, which do not change in time. Their eigenvalues are given by the $c_{ki}(t)$:</p>
+
+        $$\Theta(t)\, (\mathbf{p}_k \otimes u_i) = c_{ki}(t)\, (\mathbf{p}_k \otimes u_i) = \left(\sum_{\ell=1}^{L} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\right) (\mathbf{p}_k \otimes u_i),$$
+
+        <p>a complicated sum of singular values. For the eigenvectors that correspond to aligned modes ($k = i$), the terms in the sum are independent of $\ell$ and the expression simplifies to</p>
+
+        $$\Theta(t)\, (\mathbf{p}_i \otimes u_i) = L\, s_i(t)^{2(L-1)/L}\, (\mathbf{p}_i \otimes u_i).$$
+
+        <p>Although the precise eigenvalue for cross modes is complex, we note that it only depends on a pair of singular values. In deep linear networks these singular values undergo step-like transitions, so the eigenvalues will undergo one or two step-like transitions as well.</p>
+      </div>
+    </details>
+
+    <p>Through this calculation, we find the same eigenvectors $\mathbf{p}_k \otimes u_i$ as before, but with new eigenvalues:</p>
+
+    $$\Theta(t)\, (\mathbf{p}_k \otimes u_i) = \left(\sum_{\ell=1}^{L} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\right) (\mathbf{p}_k \otimes u_i).$$
+
+    <p>For the aligned modes $i = k$, this simplifies to:</p>
+
+    $$\boxed{\;\Theta(t)\, (\mathbf{p}_i \otimes u_i) = L\, s_i(t)^{2(L-1)/L}\, (\mathbf{p}_i \otimes u_i)\;}$$
+
+    <p>which collapses to our earlier result $2s_i(t)$ for $L = 2$. For modes connecting $i \neq k$, the eigenvalues are more complicated; E.g., a 3-layer network has:</p>
+
+    $$\Theta(t)\,(\mathbf{p}_k \otimes u_i) = \left(s_i(t)^{4/3} + s_k(t)^{2/3} s_i(t)^{2/3} + s_k(t)^{4/3}\right) (\mathbf{p}_k \otimes u_i).$$
+
+    <p>The widget below trains a multi-layer linear network. In model details, you can control the number of hidden layers to train.</p>
+
+      <div class="tutorial-widget">
+
+        <!-- TASK panel -->
+        <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+          <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+
+          <div style="margin-left: 60px;">
+
+            <!-- Input mode -->
+            <div class="inline-row" style="margin-bottom: 0.7em; gap: 18px;">
+              <span style="font-size: 14px; color: #555;">Inputs:</span>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw2-inputMode" id="tw2-inputModeWhitened" value="whitened">
+                Whitened (exact $\Sigma_x = I$)
+              </label>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw2-inputMode" id="tw2-inputModeGaussian" value="gaussian">
+                iid Gaussian $\mathcal{N}(0, I)$
+              </label>
+            </div>
+            <div id="tw2-inputModeWarning" style="font-size: 12px; color: #aa4444; margin-bottom: 0.7em; display: none;"></div>
+
+            <!-- Data params -->
+            <div id="tw2-dataParamsContainer" class="inline-row" style="margin-bottom: 1em;"></div>
+
+            <!-- Init mode -->
+            <div class="inline-row" style="margin-bottom: 1em; gap: 18px;">
+              <span style="font-size: 14px; color: #555;">Initialization:</span>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw2-initMode" id="tw2-initModeRandom" value="random">
+                Random Gaussian
+              </label>
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="radio" name="tw2-initMode" id="tw2-initModeAligned" value="aligned">
+                Aligned to SVD basis
+              </label>
+            </div>
+
+            <!-- Collapsible toggle buttons -->
+            <div style="display: flex; gap: 0.6em; flex-wrap: wrap; margin-bottom: 0.2em;">
+              <button id="tw2-toggleModelDetailsButton" class="sim-button" type="button">show model details</button>
+              <button id="tw2-toggleFunctionDetailsButton" class="sim-button" type="button">show function details</button>
+            </div>
+
+            <!-- Model details panel -->
+            <div id="tw2-modelDetailsPanel" class="details-panel task-details">
+              <div style="display: flex; gap: 2em; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1.2em;">
+
+                <!-- Hidden dim 1 -->
+                <div style="text-align: center;">
+                  <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim 1</div>
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                    <input type="range" id="tw2-hiddenDim1Slider" min="1" max="200" value="30" style="width: 120px;">
+                    <span id="tw2-hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">30</span>
+                  </div>
+                </div>
+
+                <!-- Second layer -->
+                <div style="text-align: center;">
+                  <div style="font-size: 15px; margin-bottom: 4px; color: #666;">second layer</div>
+                  <label style="font-size: 14px;">
+                    <input type="checkbox" id="tw2-useSecondLayerCheckbox"> add layer
+                  </label>
+                  <div id="tw2-hiddenDim2Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                    <span style="font-size: 14px;">dim:</span>
+                    <input type="range" id="tw2-hiddenDim2Slider" min="1" max="200" value="20" style="width: 100px;">
+                    <span id="tw2-hiddenDim2Value" style="font-size: 14px; min-width: 40px; text-align: left;">20</span>
+                  </div>
+                </div>
+
+                <!-- Third layer -->
+                <div style="text-align: center;">
+                  <div style="font-size: 15px; margin-bottom: 4px; color: #666;">third layer</div>
+                  <label style="font-size: 14px;">
+                    <input type="checkbox" id="tw2-useThirdLayerCheckbox"> add layer
+                  </label>
+                  <div id="tw2-hiddenDim3Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                    <span style="font-size: 14px;">dim:</span>
+                    <input type="range" id="tw2-hiddenDim3Slider" min="1" max="200" value="15" style="width: 100px;">
+                    <span id="tw2-hiddenDim3Value" style="font-size: 14px; min-width: 40px; text-align: left;">15</span>
+                  </div>
+                </div>
+
+                <!-- Model seed -->
+                <div style="text-align: center;">
+                  <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                    <input type="number" id="tw2-modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Random O row (aligned init only) -->
+              <div id="tw2-randomORow" class="inline-row" style="margin-bottom: 1em; display: none;">
+                <label class="inline-field" style="font-size: 14px;">
+                  <input type="checkbox" id="tw2-randomOCheckbox">
+                  Random orthogonal matrices $O$ (otherwise $O = I$)
+                </label>
+              </div>
+
+              <div id="tw2-weightCaption" style="font-size: 12px; color: #999;">
+                Weights: $W_{ij}^{(\ell)} \sim \mathcal{N}(0,\, \varepsilon^2/n_{\ell-1})$
+              </div>
+            </div>
+
+            <!-- Function details panel -->
+            <div id="tw2-functionDetailsPanel" class="details-panel task-details">
+              <div style="font-size: 15px; color: #666; margin-bottom: 10px;">
+                Ground Truth Matrix $W^\star$
+              </div>
+              <div id="tw2-dimInputs" class="inline-row" style="margin-bottom: 12px;"></div>
+              <div style="font-size: 14px; color: #666; margin-bottom: 6px;">
+                Singular Values $\sigma_m$ <span style="font-size: 12px; color: #999;">— Type any value</span>
+              </div>
+              <div id="tw2-svEditor" class="sv-editor"></div>
+              <div id="tw2-svWarning" class="sv-warning"></div>
+              <div id="tw2-basisOptions" class="inline-row" style="margin-top: 14px;"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- TRAINING panel -->
+        <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+          <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+          <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <span style="font-size: 16px;">$\eta$:</span>
+                <input type="range" id="tw2-etaSlider" min="0" max="100" value="50" style="width: 120px;">
+                <span id="tw2-etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.6</span>
+              </div>
+            </div>
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">init scale $\varepsilon$</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="range" id="tw2-initScaleSlider" min="0" max="100" value="50" style="width: 120px;">
+                <input type="number" id="tw2-initScaleNumber" min="0" step="any" value="0.01" style="width: 80px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px;">
+              </div>
+              <div style="font-size: 11px; color: #999; margin-top: 4px;">slider 0.0001–1; type any value</div>
+            </div>
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+              <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2N}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+              <div style="font-size: 12px; margin-top: 4px; color: #999;">full-batch ($|B| = N$)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SIMULATION -->
+        <hr style="border: none; border-top: 2px solid #ccc; margin-bottom: 0.2em;">
+        <div class="section-label">SIMULATION</div>
+
+        <div style="margin-top: 1em; margin-bottom: 1em;">
+          <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+            <button id="tw2-startPauseButton" class="sim-button">start</button>
+            <button id="tw2-resetButton" class="sim-button">reset</button>
+          </div>
+
+          <div class="plots-container">
+            <div class="plot-wrapper">
+              <div class="plot-box">
+                <div class="plot-content">
+                  <canvas id="tw2-lossChart" class="plot-canvas"></canvas>
+                  <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+                  <div class="x-axis-label">step</div>
+                </div>
+              </div>
+            </div>
+            <div class="plot-wrapper">
+              <div class="plot-box">
+                <div class="plot-content">
+                  <canvas id="tw2-rightChart" class="plot-canvas"></canvas>
+                  <div class="y-axis-label y-axis-label-norms">sharpness</div>
+                  <div class="x-axis-label">step</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 1em; text-align: center; color: #666; font-size: 14px;">
+            <label>steps/sec:</label>
+            <span id="tw2-stepsPerSec" style="font-weight: bold;">—</span>
+          </div>
+        </div>
+
+        <p class="widget-caption">Multi-layer network (default 2 hidden layers). Compare the measured top Hessian eigenvalues against theoretical predictions from the NTK (dotted).</p>
+      </div><!-- /training widget: multi-layer -->
+    
+  <p>We no longer observe very large sharpness values at initialization, and the previous drop in sharpness around the first singular value is much less noticeable. However, there is still disagreement between intermediate sharpness values. The splitting of theoretically identical eigenvalues also still occurs.</p>
+
+  <!-- ==================== SECTION: On 2 Layer Residuals ==================== -->
+
+  <h2>2 Layer Residuals</h2>
+
+  In the case of 2 layers, we can analytically describe the entire sharpness curves over time.
+
+  </div><!-- end .tutorial-content -->
+
+</div><!-- end .container -->
+
+<script type="module" src="ntk-app.js"></script>
+
+<!-- Training widgets: load Chart.js (in head) + the train_widget module. -->
+<script type="module">
+  import { initWidget } from './train_widget.js';
+  // 2-layer training widget — depth slider hidden (locked to single hidden layer).
+  initWidget('tw1', {
+    showLayers: false,
+    simple: true,
+    defaultEta: 0.05,
+    defaultInitScale: 0.0005,
+    defaultAlignedInit: true,
+  });
+  // Multi-layer training widget — depth slider visible; default to 2 hidden layers.
+  initWidget('tw2', {
+    showLayers: true,
+    simple: true,
+    defaultDepth: 2,
+    defaultEta: 0.25,
+    defaultInitScale: 0.02,
+    defaultAlignedInit: true,
+  });
+</script>
+
+</body>
+</html>

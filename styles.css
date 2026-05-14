@@ -1,0 +1,378 @@
+/* MLP Trainer Styles */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.page-title {
+  margin-top: 2em;
+  margin-bottom: 0;
+}
+
+.section-label {
+  font-size: 12px;
+  color: #888;
+  letter-spacing: 1px;
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+/* Range slider styling */
+input[type="range"] {
+  accent-color: #555;
+  cursor: pointer;
+}
+
+.sim-button {
+  padding: 8px 20px;
+  font-size: 14px;
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.sim-button:hover { background-color: #e0e0e0; }
+.sim-button:active { background-color: #d0d0d0; }
+
+/* Setup boxes */
+.setup-box {
+  padding: 1.5em;
+  padding-top: 2.5em;
+  padding-bottom: 2.5em;
+  border-radius: 8px;
+  position: relative;
+  min-height: 80px;
+  margin-bottom: 1em;
+}
+
+.setup-box-label {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: rotate(-90deg) translateX(-50%);
+  transform-origin: left center;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: pre;
+}
+
+.setup-box-content {
+  margin-left: 60px;
+  display: flex;
+  gap: 2em;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* Specific box colors */
+.box-task { background-color: #f0fff0; }
+.box-task .setup-box-label { color: #55aa55; }
+
+.box-network { background-color: #fff0f0; }
+.box-network .setup-box-label { color: #cc5555; }
+
+.box-training { background-color: #f0f4ff; }
+.box-training .setup-box-label { color: #5578cc; }
+
+/* Plots */
+.plots-container {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.plot-wrapper { flex: 0 0 500px; }
+
+.plot-box {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  padding: 20px;
+  padding-left: 40px;
+  padding-bottom: 40px;
+  height: 335px;
+}
+
+.plot-content {
+  height: 100%;
+  position: relative;
+}
+
+.plot-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Axis labels */
+.y-axis-label {
+  position: absolute;
+  top: 50%;
+  transform: rotate(-90deg) translateY(-50%);
+  transform-origin: center center;
+  font-size: 17px;
+  color: #666;
+  word-spacing: 0.3em;
+}
+
+.y-axis-label-loss { left: -32px; }
+.y-axis-label-norms { left: -40px; }
+
+.x-axis-label {
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 17px;
+  color: #666;
+}
+
+/* Plot controls */
+.logscale-control {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.logscale-control label { margin-right: 30px; }
+
+/* Plot x-axis toggle */
+.plot-xaxis-toggle { font-size: 0.9em; }
+
+.plot-xaxis-toggle a {
+  color: #666;
+  text-decoration: none;
+  padding: 0.4em 0.8em;
+  display: inline-block;
+  border: 1px solid #ccc;
+  background: white;
+  transition: all 0.2s;
+}
+
+.plot-xaxis-toggle a:first-of-type {
+  border-radius: 4px 0 0 4px;
+  border-right: none;
+}
+
+.plot-xaxis-toggle a:last-of-type {
+  border-radius: 0 4px 4px 0;
+}
+
+.plot-xaxis-toggle a:hover { background: #eee; }
+
+.plot-xaxis-toggle a.active {
+  background: #333;
+  color: white;
+  border-color: #333;
+}
+
+/* Dropdowns */
+select {
+  padding: 4px 8px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+}
+
+/* ══════════════════════════════════════════════════════
+   Tutorial / blog post content styles
+   ══════════════════════════════════════════════════════ */
+
+.tutorial-content {
+  line-height: 1.75;
+  font-size: 16px;
+  color: #222;
+}
+
+.tutorial-content h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin-top: 2.5em;
+  margin-bottom: 0.6em;
+  color: #222;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 0.3em;
+}
+
+.tutorial-content h3 {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  color: #333;
+}
+
+.tutorial-content p {
+  margin-bottom: 0.9em;
+}
+
+.tutorial-content ul,
+.tutorial-content ol {
+  margin-bottom: 0.9em;
+  padding-left: 1.6em;
+}
+
+.tutorial-content li {
+  margin-bottom: 0.35em;
+}
+
+/* Callout / note box */
+.tutorial-note {
+  background: #fffbea;
+  border-left: 3px solid #ddb84a;
+  padding: 0.7em 1em;
+  margin: 1.1em 0;
+  font-size: 14px;
+  color: #555;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Figures */
+.tutorial-figure {
+  margin: 1.6em 0;
+  text-align: center;
+}
+
+.tutorial-figure img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.tutorial-figure figcaption {
+  font-size: 13px;
+  color: #777;
+  margin-top: 0.5em;
+  line-height: 1.5;
+}
+
+/* Widget boxes */
+.tutorial-widget {
+  background-color: #f7f5f0;
+  padding: 1.5em;
+  padding-top: 1.8em;
+  padding-bottom: 1.8em;
+  border-radius: 8px;
+  margin: 1.4em 0;
+  position: relative;
+}
+
+.tutorial-widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin-bottom: 1.1em;
+}
+
+.tutorial-widget-charts {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tutorial-widget-chart {
+  flex: 1;
+  min-width: 200px;
+}
+
+.tutorial-widget-info {
+  font-size: 13px;
+  color: #888;
+}
+
+.widget-caption {
+  font-size: 13px;
+  color: #888;
+  margin-top: 10px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* Accordion (footnotes / derivations) */
+.accordion {
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  margin: 1.1em 0;
+  background: #fff;
+}
+
+.accordion summary {
+  cursor: pointer;
+  padding: 0.65em 1em;
+  font-weight: 600;
+  font-size: 15px;
+  color: #333;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  user-select: none;
+}
+
+.accordion summary::-webkit-details-marker { display: none; }
+
+.accordion summary::before {
+  content: '▶';
+  font-size: 9px;
+  color: #999;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+.accordion[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.accordion-body {
+  padding: 0.8em 1.2em 1em;
+  border-top: 1px solid #eee;
+  font-size: 15px;
+  color: #444;
+  line-height: 1.7;
+}
+
+.accordion-body p { margin-bottom: 0.7em; }
+
+/* Preset / load-run buttons */
+.preset-buttons {
+  margin-top: 0.8em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.load-runs-button {
+  padding: 5px 14px;
+  font-size: 13px;
+  background: #fff;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.load-runs-button:hover { background: #f0eeea; }
+
+/* References list */
+.references {
+  font-size: 14px;
+  color: #555;
+  padding-left: 1.5em;
+}
+
+.references li { margin-bottom: 0.45em; }
+
+/* Hero / intro widget caption */
+.hero-caption {
+  font-size: 13px;
+  color: #888;
+  margin-top: 10px;
+  text-align: center;
+  line-height: 1.5;
+}

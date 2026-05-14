@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Investigating the Edge of Stability</title>
+
+  <!-- Jekyll front matter (uncomment and remove HTML wrapper to use with Jekyll)
+  ---
+  layout: default
+  permalink: /expander-nets/
+  skip_mathjax: true
+  ---
+  -->
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: {
+        scale: 1.0
+      },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          console.log('MathJax is ready');
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+
+  <style>
+    /* -------------------------------------------------------- */
+    /* Interactive GD widgets                                   */
+    /* -------------------------------------------------------- */
+
+    /* Shared controls */
+    .gd-ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 14px;
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+    .gd-ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .gd-ctrl-group label { min-width: 20px; text-align: right; }
+    .gd-ctrl-group input[type="range"] {
+      width: 160px;
+      accent-color: #2563eb;
+    }
+    .gd-ctrl-value {
+      min-width: 48px;
+      font-family: Monaco, Consolas, monospace;
+      font-size: 13px;
+      color: #333;
+    }
+    .gd-ctrl-btn {
+      padding: 5px 14px;
+      font-size: 13px;
+      font-family: inherit;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #374151;
+      transition: background 0.15s;
+    }
+    .gd-ctrl-btn:hover { background: #e5e7eb; }
+
+    /* 1-D quadratic widget */
+    .gd1d-inner {
+      display: inline-block;
+      width: 75%;
+    }
+    .gd1d-canvas-row {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+    }
+    .gd1d-canvas-wrap {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .gd1d-canvas-wrap canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      background: white;
+    }
+
+    /* 2-D rotated quadratic widget */
+    .gd2d-inner {
+      display: inline-block;
+      width: 100%;
+      max-width: 720px;
+    }
+    .gd2d-canvas-wrap canvas {
+      width: 100%;
+      aspect-ratio: 2 / 1;
+      display: block;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      background: white;
+    }
+
+    /* -------------------------------------------------------- */
+    /* Deep Scalar Network (Function 5 widget)                  */
+    /* -------------------------------------------------------- */
+
+    .dsn-experiment {
+      margin: 1.5em 0 2.5em 0;
+    }
+    .dsn-controls {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-bottom: 1em;
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+    .dsn-slider-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dsn-value-display {
+      min-width: 44px;
+      font-family: Monaco, Consolas, monospace;
+      font-size: 13px;
+    }
+    .dsn-landscape-wrap {
+      position: relative;
+      width: 340px;
+      height: 340px;
+      flex-shrink: 0;
+      margin-left: 44px;
+      margin-bottom: 30px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: white;
+    }
+    .dsn-canvas-label {
+      position: absolute;
+      top: -22px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 13px;
+      color: #555;
+      font-style: italic;
+    }
+    .dsn-landscape-wrap canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border-radius: 3px;
+    }
+    .dsn-bg { z-index: 1; }
+    .dsn-ov { z-index: 2; }
+    .dsn-x-label {
+      position: absolute;
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 16px;
+      color: #666;
+    }
+    .dsn-y-label {
+      position: absolute;
+      left: -50px;
+      top: 50%;
+      transform: rotate(-90deg) translateX(50%);
+      transform-origin: center center;
+      font-size: 16px;
+      color: #666;
+      white-space: nowrap;
+    }
+    .dsn-tick {
+      position: absolute;
+      font-size: 13px;
+      color: #555;
+      font-family: Monaco, Consolas, monospace;
+    }
+    .dsn-tick-x {
+      bottom: -18px;
+      transform: translateX(-50%);
+    }
+    .dsn-tick-y {
+      left: -26px;
+      transform: translateY(-50%);
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ============================================================ -->
+  <!-- TUTORIAL CONTENT -->
+  <!-- ============================================================ -->
+
+  <h1 class="page-title" style="margin-bottom: 0.3em;">Investigating the Edge of Stability</h1>
+
+  <div class="tutorial-content">
+
+    <!-- Hero plot: animated reveal of a pre-computed training run -->
+    <div class="tutorial-widget" id="heroPlotContainer">
+      <div class="tutorial-widget-charts">
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="heroLossChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="heroSharpnessChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-norms">sharpness</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-caption">An 11-layer VGG trained on 5000 CIFAR-10 samples with learning rate η&nbsp;=&nbsp;0.01. Loss decreases while sharpness rises to meet the stability threshold 2/η, then oscillates around it.</div>
+    </div>
+
+    <p>Training a neural network means choosing a learning rate. Too small and training is too slow; too large and it diverges.</p>
+
+    <p>But something strange happens between these two extremes. For practical learning rates, the curvature of the loss landscape - the sharpness - slowly increases and inevitably crosses a critical threshold. At this threshold, the loss curve starts spiking erratically. Superficially, it seems like training will diverge.</p>
+
+    <p>And yet, it isn't. Zoom out, and the loss is still going down. The network is still learning. It has found a way to balance itself, training at what is called the edge of stability.</p>
+
+    <p>While neural network training is generally very difficult to analyze, it turns out we can understand several properties of this regime. In this article, we'll build up an explanation from first principles and run experiments directly in the browser. <strong>(Probably needs more motivation.)</strong></p>
+
+    <!-- ==================== SECTION: Edge of Stability  ==================== -->
+
+    <h2>Understanding Gradient Descent</h2>
+
+    <p>We begin with gradient descent, and discuss modifications like SGD and adaptive gradients later. In Gradient descent, parameters $w_i$ are updated according to</p>
+    
+    $$w_{i+1} = w_i - \eta \nabla L(w_i)$$
+
+    <p>where $\eta$ is the learning rate and $L$ is the loss. This is a simple rule, but analyzing its behavior on neural networks is not. To see this, consider the limit where $\eta \to 0$, where it becomes a continuous differential equation called gradient flow:</p>
+
+    $$\frac{d w(t)}{dt} = - \nabla L(w(t))$$
+
+    <p>A network with 100 parameters yields a 100-dimensional nonlinear differential equation where the different weight dynamics are nontrivially coupled. Analyzing this is hard even for small models with synthetic data. And this is ignoring the difficulties of nonzero learning rates, which introduce their own discretization instabilities on top of all of this.</p>
+
+    <p>Despite this, classical optimization theory gives us one useful foothold: if the learning rate is small enough relative to the global curvature of the loss, gradient descent is guaranteed to decrease the loss at every step.<sup><a href="#footnote-smoothness">[1]</a></sup> In other words, curvature determines how aggressively we can optimize.</p>
+
+    <p>Why does curvature matter? To build intuition, consider a 1D quadratic $L(w) = \frac{1}{2}Sw^2$, where $S$ controls the curvature. The update rule becomes</p>
+
+    $$w_{i+1} = w_i - \eta S w_i \implies w_{n} = (1 - \eta S)^n w_0$$
+
+    <p>which converges to the minimum $w = 0$ only if</p>
+
+    $$|1 - \eta S| < 1 \implies S < \frac{2}{\eta}$$
+
+    <p>If the learning rate is small relative to the curvature, gradient descent converges. If it's too large, the updates overshoot and oscillate around the minimum. If the curvature exceeds $2/\eta$, these oscillations grow, resulting in divergence.</p>
+    
+    <figure class="tutorial-figure">
+      <div style="display:flex; justify-content:center;">
+        <div class="gd1d-inner">
+          <div class="tutorial-widget" style="margin-bottom: 0;">
+            <div class="gd-ctrl-row">
+              <div class="gd-ctrl-group">
+                <label for="idx-gd-eta-slider">$\eta$:</label>
+                <input type="range" id="idx-gd-eta-slider"
+                       min="0.05" max="1.95" step="0.005" value="1.2">
+                <span id="idx-gd-eta-value" class="gd-ctrl-value">1.200</span>
+              </div>
+              <button id="idx-gd-reset-btn" class="gd-ctrl-btn">Reset defaults</button>
+            </div>
+            <div class="gd1d-canvas-row">
+              <div class="gd1d-canvas-wrap">
+                <canvas id="idx-gd-conv-canvas" width="380" height="320"></canvas>
+              </div>
+              <div class="gd1d-canvas-wrap">
+                <canvas id="idx-gd-div-canvas" width="380" height="320"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption><strong>Left:</strong> For small enough step sizes (relative to the curvature of the quadratic) gradient descent steadily approaches the minimum of the quadratic. <strong>Right:</strong> If the step size is too large, the optimized parameter oscillates with growing amplitude, diverging.</figcaption>
+    </figure>
+
+    <p>For a multidimensional quadratic loss $L(w) = \frac{1}{2}w^\top A w$, where $A = \nabla^2 L$ is the Hessian, the update is</p>
+
+    $$w_{i+1} = (I - \eta A)w_i$$
+
+    <p>We can decompose $w$ along the eigenvectors of $A$. Each components amplitude $w_i^k$ (along eigenvector $\vec{k}$ with eigenvalue $\lambda_k$) evolves independently, exactly like the 1D case:</p>
+
+    $$w_{i+1}^{k} = (1 - \eta \lambda_{k})w_{i}^{k}$$
+
+    <p>Every component needs to converge, so the tightest constraint comes from the largest eigenvalue:</p>
+
+    $$\lambda_{\max}(A) < \frac{2}{\eta}$$
+
+    <p>We call the largest eigenvalue $\lambda_{\max}(A)$ the <strong>sharpness</strong>. It controls whether gradient descent converges or diverges on a quadratic, and as we saw in the opening figure, it accurately predicts when gradient descent on neural networks starts to behave erratically. This gives us the defining condition of the edge of stability: it occurs when the sharpness exceeds $2/\eta$.</p>
+
+    <figure class="tutorial-figure">
+      <div style="display:flex; justify-content:center;">
+        <div class="gd2d-inner">
+          <div class="tutorial-widget" style="margin-bottom: 0;">
+            <div class="gd-ctrl-row">
+              <div class="gd-ctrl-group">
+                <label for="idx-q2d-lam1-slider">$\lambda_1$:</label>
+                <input type="range" id="idx-q2d-lam1-slider"
+                       min="0.5" max="16" step="0.5" value="8">
+                <span id="idx-q2d-lam1-value" class="gd-ctrl-value">8.0</span>
+              </div>
+              <div class="gd-ctrl-group">
+                <label for="idx-q2d-lam2-slider">$\lambda_2$:</label>
+                <input type="range" id="idx-q2d-lam2-slider"
+                       min="0.1" max="8" step="0.1" value="0.5">
+                <span id="idx-q2d-lam2-value" class="gd-ctrl-value">0.50</span>
+              </div>
+              <div class="gd-ctrl-group">
+                <label for="idx-q2d-eta-slider">$\eta$:</label>
+                <input type="range" id="idx-q2d-eta-slider"
+                       min="0.01" max="0.5" step="0.005" value="0.27">
+                <span id="idx-q2d-eta-value" class="gd-ctrl-value">0.270</span>
+              </div>
+              <button id="idx-q2d-reset-btn" class="gd-ctrl-btn">Reset defaults</button>
+            </div>
+            <div class="gd2d-canvas-wrap">
+              <canvas id="idx-q2d-canvas" width="960" height="480"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>In the multi-dimensional case, gradient descent is unstable if one eigenvalue is too large, causing it to diverge along that direction.</figcaption>
+    </figure>
+
+    <h2>Progressive Sharpening</h2>
+
+    <p>This quadratic analysis has led past work to suggest the learning rate should be chosen by calculating the Hessian eigenvalue $\lambda_{\max}$. Setting $\eta = 1/\lambda_{\max}$ results in the fastest convergence on a quadratic, avoiding any oscillations (even those that slowly decay).</p>
+
+    <p>However, real loss landscapes are not quadratics. Their curvature varies over training, making this proposal impractical since it would require frequent and expensive Hessian computations to adapt to the changing curvature. <strong>However, the real loss landscape can be approximated by a quadratic in a sufficiently small neighborhood around the current parameters, and thus computing the local sharpness $\lambda_{\max}$ can still be useful for understanding the behavior of gradient descent, such as our previously derived local stability threshold of $2/\eta$.</strong></p>
+    
+    <p>In fact, inspecting curvature over real training runs reveals an interesting trend - for many tasks, it tends to increase over time. We call this phenomenon <strong>progressive sharpening</strong>. It occurs across a large variety of tasks and models, and appears to be more pronounced for deeper networks.</p>
+
+    <figure class="tutorial-figure">
+      <img src="imgs/ps_examples.png" alt="Examples of progressive sharpening" style="max-width: 70%;">
+      <figcaption>Across many tasks and models, the sharpness of our neural networks tends to increase throughout training, until reaching our previously calculated stability threshold of $2/\eta$. The above results were obtained on a subset of CIFAR-10. Original graphic from the <a href="https://centralflows.github.io/">central flows blog.</a></figcaption>
+    </figure>
+    
+    <p>While the reasons for progressive sharpening are not fully understood, the consequence is clear: most practical learning rates, which start out well behaved, will eventually reach the $2/\eta$ threshold. Learning rates that avoid this threshold are so small that training becomes impractically slow. This makes the edge of stability an inevitable part of training for any practical learning rate.</p>
+
+    <h2>Edge of Stability and Self Stability</h2>
+
+    <p>As you might have seen in the previous figure, something interesting happens at the $2/\eta$ threshold. The sharpness doesn't keep growing, but instead oscillates around the threshold. This is the edge of stability. You can see this for yourself in the experiment below, where you can adjust the learning rate for this model and observe oscillations at $2/\eta$.</p>
+
+    <!-- Base Experiment: Progressive Sharpening + Edge of Stability
+         Task: Chebyshev degree 4, 20 points, full-batch
+         Model: tanh, 2 hidden layers (30 + 30), seed 0
+         LR: 0.15, max steps: 5000
+         Hessian: kEigs=1
+         Charts: train loss (no test, no EMA), sharpness (1 eigenvalue + 2/η)
+    -->
+    <div class="tutorial-widget">
+      <div class="tutorial-widget-controls">
+        <button id="base-experiment-start" class="sim-button">start</button>
+        <button id="base-experiment-reset" class="sim-button">reset</button>
+        <div class="gd-ctrl-group">
+          <label for="base-experiment-lr-slider">$\eta$:</label>
+          <input type="range" id="base-experiment-lr-slider"
+                 min="0.1" max="0.3" step="0.01" value="0.2">
+          <span id="base-experiment-lr-value" class="gd-ctrl-value">0.20</span>
+          <button id="base-experiment-lr-default" class="gd-ctrl-btn" title="Reset η to default (0.20)">↺ default</button>
+        </div>
+        <span id="base-experiment-info" class="tutorial-widget-info"></span>
+      </div>
+      <div class="tutorial-widget-charts">
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="base-experiment-loss" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="base-experiment-sharpness" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-norms">sharpness</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>In browser training for a MLP on a Chebyshev polynomial (a simple toy task).</a></figcaption>
+    </div>
+
+    <p>This phenomenon where the sharpness decreases after crossing the $2/\eta$ threshold is known as self-stability. It can be explained by going beyond classical theory with a <strong>third order Taylor expansion of the loss</strong>. To understand this, we'll go through a heuristic derivation for a single eigenvector at the edge of stability.</p>
+
+    <p>Beyond the critical threshold, gradient descent oscillates along the top Hessian eigenvector, $u$. Let $\hat{w}$ denote the point where we'd be if not for these oscillations. Because we have oscillations, our network is instead at</p>
+
+    $$w = \hat{w} + x u$$
+    
+    <p>where $x$ is the amplitude of the oscillation. We can Taylor expand the gradient of the loss around $\hat{w}$ to understand how oscillations have changed our dynamics.</p>
+    
+    <h3>Second Order Taylor Expansion</h3>
+
+    <p>As a refresher on vector Taylor expansions, imagine flattening our parameters into a vector in $\mathbb{R}^p$, and choosing one of the parameters $w_j$. The Taylor expansion for a single component is</p>
+
+    $$\frac{\partial L}{\partial w_j}(\hat{w} + x u) = \frac{\partial L}{\partial w_j}  + \left[ \frac{\partial^2 L (\hat{w}) }{\partial w_1 \partial w_j} , \; \frac{\partial^2 L (\hat{w})}{\partial w_2 \partial w_j} , \; \dots, \; \frac{\partial^2 L (\hat{w}) }{\partial w_p \partial w_j}  \right] (x u) + O(x^2 \|u\|^2)$$
+
+    <p>Stacking these terms for all parameters gives us</p>
+
+    $$
+    \nabla L(\hat{w} + x u) = \nabla L + 
+    \begin{bmatrix}
+    \frac{\partial^2 L (\hat{w})}{\partial w_1 \partial w_1}  & \frac{\partial^2 L (\hat{w})}{\partial w_2 \partial w_1}  & \cdots & \frac{\partial^2 L (\hat{w})}{\partial w_p \partial w_1}  \\
+    \frac{\partial^2 L (\hat{w})}{\partial w_1 \partial w_2}  & \frac{\partial^2 L (\hat{w})}{\partial w_2 \partial w_2}  & \cdots & \frac{\partial^2 L (\hat{w})}{\partial w_p \partial w_2}  \\
+    \vdots & \vdots & \ddots & \vdots \\
+    \frac{\partial^2 L (\hat{w})}{\partial w_1 \partial w_p}  & \frac{\partial^2 L (\hat{w})}{\partial w_2 \partial w_p}  & \cdots & \frac{\partial^2 L (\hat{w})}{\partial w_p \partial w_p} 
+    \end{bmatrix} (x u) + O(x^2 \|u\|^2)
+    $$
+
+    <p>The matrix in the second term is the Hessian at $\hat{w}$, $H_{ij}(\hat{w}) = \frac{\partial^2 L (\hat{w})}{\partial w_i \partial w_j}$. Thus our second order Taylor expansion is </p>
+
+    $$\nabla L(\hat{w} + x u) = \nabla L(\hat{w}) + xH(\hat{w}) u + O(x^2 \|u\|^2)$$
+    
+    <p>Since $u$ is an eigenvector, $H(\hat{w}) u = \lambda u$ where $\lambda$ is the corresponding eigenvalue. Plugging this into gradient descent yields</p>
+
+    $$(\hat{w} + x u) - \eta \nabla L(\hat{w} + x u) = \hat{w} - \eta \nabla L(\hat{w}) + \underset{\text{oscillations along }u}{(1 - \eta \lambda) x u} + O(\eta x^2 \|u\|^2)$$
+      
+    <p>Thus we expect oscillations along the eigenvector $u$ to grow in magnitude when $\lambda > 2/\eta$.</p>
+
+    <h3>Third Order Taylor Expansion</h3>
+
+    <p>The third order term is more complicated. For a single component, it results in a matrix, and stacking all the components results in a 4d tensor. However, this tensor has a surprisingly simple interpretation. To see this, we write out the single component Taylor expansion as a summation</p>
+
+    $$\frac{\partial L}{\partial w_i}(\hat{w} + xu) = \frac{\partial L(\hat{w})}{\partial w_i} + x\sum_{j=1}^p \frac{\partial^2 L(\hat{w})}{\partial w_i \partial w_j} \cdot u_j + \frac{1}{2}x^2\sum_{j,k=1}^p \frac{\partial^3 L(\hat{w}) }{\partial w_i \partial w_j \partial w_k}\cdot u_j u_k + O(x^3 \|u\|^3)$$
+
+    <p>Note that the sharpness is given by $\lambda(w) = u^T H(w) u = \sum_{j,k} u_j \frac{\partial^2 L}{\partial w_j \partial w_k} u_k$, since $u$ is a unit eigenvector of $H$. The gradient of the sharpness with respect to $w_i$ is</p>
+
+    $$\frac{\partial \lambda}{\partial w_i} = \sum_{j,k} u_j \frac{\partial^3 L}{\partial w_i \partial w_j \partial w_k} u_k$$
+
+    <p>and thus the Taylor expansion is</p>
+
+    $$\nabla L(\hat{w} + x u) = \nabla L + x \lambda (\hat{w}) u + \frac{1}{2}x^2 \nabla \lambda (\hat{w}) + O(x^3 \|u\|^3)$$
+    
+    <p> So the third order term pushes gradient descent into a direction that reduces the sharpness, with strength proportional to the square of oscillations. In the unstable regime where oscillations increase in amplitude, this term will eventually dominate and result in a trajectory that reduces sharpness, counteracting the effect of progressive sharpening.</p>
+      
+    <p>When the sharpness is below the threshold again, oscillations shrink. Then progressive sharpening can occur again, pushing the sharpness back up.</p>
+
+    <p>These effects can be seen in the following diagram, which displays data from training 2000 samples of 5 class CIFAR10 on a small network. By moving the epoch slider, you can observe how the dynamics change as different terms in the Taylor expansion activate. We see that sharpness suppression very quickly takes effect when oscillations become a noticeable fraction of the gradient.</p>
+
+
+    <figure class="tutorial-figure">
+      <div class="viewer-wrap">
+
+        <!-- Epoch slider -->
+        <div class="epoch-row">
+          <label>Epoch</label>
+          <div class="epoch-slider-wrap" id="epoch-slider-wrap">
+            <div id="region-bar"></div>
+            <div class="epoch-track-wrap" id="epoch-track-wrap">
+              <div class="epoch-track">
+                <div class="epoch-track-fill" id="epoch-track-fill"></div>
+              </div>
+              <div class="epoch-thumb" id="epoch-thumb"></div>
+            </div>
+          </div>
+          <span class="val" id="epoch-value">—</span>
+        </div>
+
+        <div id="load-status" style="font-size:13px;color:#888;min-height:1.4em;">Loading data…</div>
+
+        <!-- Panels -->
+        <div class="panels" style="height:520px;">
+
+          <!-- Left: 2D plots -->
+          <div class="panel-2d">
+            <div class="plot2d-wrap">
+              <canvas id="canvas-xy"></canvas>
+              <span class="plot2d-label">residual (x) · sharpness λ₁ (y)</span>
+            </div>
+            <div class="plot2d-wrap">
+              <canvas id="canvas-xz"></canvas>
+              <span class="plot2d-label">residual (x) · eigenvector (y)</span>
+            </div>
+          </div>
+
+          <!-- Right: 3D -->
+          <div class="panel-3d">
+            <canvas id="canvas-3d"></canvas>
+            <div class="controls-overlay">
+              <span class="panel-3d-title">3D Display</span>
+              <div class="controls-overlay-bottom">
+                <div class="slider-group">
+                  <label>Tilt</label>
+                  <input type="range" id="rotx-slider" min="-90" max="0" step="1" value="-10" style="width:160px">
+                  <span class="val" id="rotx-value">-10°</span>
+                </div>
+                <div class="slider-group">
+                  <label>Rotate</label>
+                  <input type="range" id="roty-slider" min="-90" max="90" step="1" value="0" style="width:160px">
+                  <span class="val" id="roty-value">0°</span>
+                </div>
+                <div class="slider-group">
+                  <label>Zoom</label>
+                  <input type="range" id="zoom-slider" min="0" max="1000" step="1" value="600" style="width:160px">
+                  <span class="val" id="zoom-value">1.5</span>
+                </div>
+                <button id="fix-btn">Fix Horizontal View</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- .panels -->
+
+        <div id="region-text" style="
+          padding: 10px 14px;
+          border-left: 4px solid #ddd;
+          border-radius: 3px;
+          background: #fafafa;
+          font-size: 14px;
+          line-height: 1.6;
+        ">
+          <span class="region-text-label" style="font-weight:600; font-size:11px; letter-spacing:0.5px; display:block; margin-bottom:4px; color:#999;">—</span>
+          <span class="region-text-body" style="color:#444;">Scrub the epoch slider to see region descriptions.</span>
+        </div>
+
+      </div><!-- .viewer-wrap -->
+    </figure>
+    <h3>Summary</h3>
+
+    <p>This completes our understanding of a single oscillating eigenvector at the edge of stability. The full trajectory is as follows:</p>
+
+    <ul>
+        <li>The network has an initial loss and sharpness. The gradient tends to align with the sharpness gradient $\nabla \lambda$, causing sharpness to increase over time (progressive sharpening).</li>
+        <li>For many learning rates, the sharpness reaches the $2/\eta$ threshold. The component of the gradient along the largest eigenvector $u$ starts to oscillate. This causes spikes in the loss.</li>
+        <li>As oscillations grow, the third order Taylor term becomes stronger, pushing the trajectory in a direction that reduces sharpness.</li>
+        <li>As sharpness reduces, the oscillations shrink and the third order term weakens, allowing progressive sharpening to dominate again. The trajectory heads back to the edge of stability, where it oscillates again.</li>
+        <li>Throughout this process, the network makes steady progress in lowering the loss overall, albeit with noisy spikes.</li>
+    </ul>
+
+    <p>The entire process can be visualized directly for a 2-variable model, shown below for $L = (1 - a x^2 - y^2)^2$ below. You can adjust the learning rate and $a$ freely to observe edge of stability behaviour.</p>
+
+    <div class="dsn-experiment">
+
+      <!-- Sliders + reset: centered above the widget box -->
+      <div style="display:flex; justify-content:center; align-items:center; gap:24px; margin-bottom:12px; font-size:14px;">
+        <div class="dsn-slider-group">
+          <label for="dsn5-eta-slider">$\eta$:</label>
+          <input type="range" id="dsn5-eta-slider" min="0.01" max="1.0" step="0.01" value="0.3" style="width:160px;">
+          <span id="dsn5-eta-value" class="dsn-value-display">0.300</span>
+        </div>
+        <div class="dsn-slider-group">
+          <label for="dsn5-a-slider">$a$:</label>
+          <input type="range" id="dsn5-a-slider" min="0.5" max="2.0" step="0.05" value="0.5" style="width:160px;">
+          <span id="dsn5-a-value" class="dsn-value-display">0.50</span>
+        </div>
+        <button id="dsn5-reset-btn" class="sim-button" style="font-size:12px; padding:3px 10px;">reset</button>
+      </div>
+
+      <!-- Three-section layout: [loss 2D] | [sharpness 2D] | [charts stacked] -->
+      <div style="display:flex; justify-content:center;">
+      <div style="display:inline-flex; gap:0; padding:24px 28px 28px 28px; border:1px solid #ccc; border-radius:6px; background:white; align-items:flex-start;">
+
+        <!-- 1. Loss 2D -->
+        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:6px; flex-shrink:0;">
+          <div style="font-size:17px; color:#333; width:334px; text-align:center;">Loss</div>
+          <div class="dsn-landscape-wrap" style="width:290px; height:290px; border:none; border-radius:0; background:transparent;">
+            <canvas id="dsn5-loss-bg" class="dsn-bg" width="290" height="290"></canvas>
+            <canvas id="dsn5-loss-ov" class="dsn-ov" width="290" height="290"></canvas>
+            <div class="dsn-x-label">$x$</div>
+            <div class="dsn-y-label">$y$</div>
+            <div class="dsn-tick dsn-tick-x" style="left:0%">-2</div>
+            <div class="dsn-tick dsn-tick-x" style="left:25%">-1</div>
+            <div class="dsn-tick dsn-tick-x" style="left:50%">0</div>
+            <div class="dsn-tick dsn-tick-x" style="left:75%">1</div>
+            <div class="dsn-tick dsn-tick-x" style="left:100%">2</div>
+            <div class="dsn-tick dsn-tick-y" style="top:0%">2</div>
+            <div class="dsn-tick dsn-tick-y" style="top:25%">1</div>
+            <div class="dsn-tick dsn-tick-y" style="top:50%">0</div>
+            <div class="dsn-tick dsn-tick-y" style="top:75%">-1</div>
+            <div class="dsn-tick dsn-tick-y" style="top:100%">-2</div>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div style="width:1px; background:#ddd; align-self:stretch; margin:0 20px; flex-shrink:0;"></div>
+
+        <!-- 2. Sharpness 2D -->
+        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:6px; flex-shrink:0;">
+          <div style="font-size:17px; color:#333; width:334px; text-align:center;">Sharpness $\lambda_{\max}$</div>
+          <div class="dsn-landscape-wrap" style="width:290px; height:290px; border:none; border-radius:0; background:transparent;">
+            <canvas id="dsn5-sharp-bg" class="dsn-bg" width="290" height="290"></canvas>
+            <canvas id="dsn5-sharp-ov" class="dsn-ov" width="290" height="290"></canvas>
+            <div class="dsn-x-label">$x$</div>
+            <div class="dsn-y-label">$y$</div>
+            <div class="dsn-tick dsn-tick-x" style="left:0%">-2</div>
+            <div class="dsn-tick dsn-tick-x" style="left:25%">-1</div>
+            <div class="dsn-tick dsn-tick-x" style="left:50%">0</div>
+            <div class="dsn-tick dsn-tick-x" style="left:75%">1</div>
+            <div class="dsn-tick dsn-tick-x" style="left:100%">2</div>
+            <div class="dsn-tick dsn-tick-y" style="top:0%">2</div>
+            <div class="dsn-tick dsn-tick-y" style="top:25%">1</div>
+            <div class="dsn-tick dsn-tick-y" style="top:50%">0</div>
+            <div class="dsn-tick dsn-tick-y" style="top:75%">-1</div>
+            <div class="dsn-tick dsn-tick-y" style="top:100%">-2</div>
+          </div>
+        </div>
+
+        <!-- Divider — tighter before right panel -->
+        <div style="width:1px; background:#ddd; align-self:stretch; margin:0 12px 0 8px; flex-shrink:0;"></div>
+
+        <!-- 3. Loss + λ_max line charts stacked -->
+        <div style="display:flex; flex-direction:column; gap:8px; width:220px; height:347px; flex-shrink:0;">
+
+          <!-- Loss line chart -->
+          <div style="position:relative; flex:1; min-height:0; margin-left:36px; margin-bottom:6px;">
+            <canvas id="dsn5-loss-chart" style="position:absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+            <div style="position:absolute; left:-32px; top:50%; transform:rotate(-90deg) translateX(50%); transform-origin:center center; font-size:12px; color:#666; white-space:nowrap;">loss</div>
+            <div style="position:absolute; bottom:-16px; left:50%; transform:translateX(-50%); font-size:12px; color:#666;">step</div>
+          </div>
+
+          <!-- λ_max line chart -->
+          <div style="position:relative; flex:1; min-height:0; margin-left:36px; margin-bottom:6px;">
+            <canvas id="dsn5-eig-chart" style="position:absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+            <div style="position:absolute; left:-32px; top:50%; transform:rotate(-90deg) translateX(50%); transform-origin:center center; font-size:12px; color:#666; white-space:nowrap;">$\lambda_{\max}$</div>
+            <div style="position:absolute; bottom:-16px; left:50%; transform:translateX(-50%); font-size:12px; color:#666;">step</div>
+          </div>
+
+        </div><!-- end right charts -->
+
+      </div><!-- end outer border -->
+      </div><!-- end centering wrapper -->
+    </div><!-- end .dsn-experiment -->
+
+  
+    <p>Generally, a third dimension is needed to show that the network makes steady progress to lower loss amidst the oscillations. However, in this 2d model the loss would have reached a minima without oscillations, and the sharpness reducing gradient drives all of the net motion. Thus the dynamics are fully 2D and can be completely visualized.</p>
+
+    <h2>Other Eigenvalues</h2>
+
+    <p>In general, more than one eigenvector undergoes progressive sharpening and ends up at the EOS. Empirically, we find the same self-stabilization occurs, but the dynamics are much more chaotic.</p>
+
+    <p>However, our previous analysis breaks down here. Let us consider a perturbation with two eigenvectors at the edge of stability, $\delta = x_1 u_1 + x_2 u_2$. The Taylor expansion up to second order gives</p>
+
+    $$\nabla L(\hat{w} + \delta) = \nabla L(\hat{w}) + H(\hat{w})\delta + O(\|\delta\|^2)$$
+
+    <p>Since $u_1$ and $u_2$ are eigenvectors of $H(\hat{w})$, this simplifies to</p>
+
+    $$\nabla L(\hat{w} + \delta) = \nabla L(\hat{w}) + x_1 \lambda_1(\hat{w}) u_1 + x_2 \lambda_2(\hat{w}) u_2 + O(\|\delta\|^2)$$
+
+    <p>Each eigenvector oscillates independently, just as in the single-eigenvector case. The complications arise at third order.</p>
+
+    <p><strong>Please check this argument for accuracy.</strong></p>
+
+    <p>Expanding the third-order term yields three contributions:</p>
+
+    $$\frac{1}{2}x_1^2\nabla\lambda_1(\hat{w}) + \frac{1}{2}x_2^2\nabla\lambda_2(\hat{w}) + x_1 x_2\,\nabla(u_1^T H(\hat{w}) u_2)$$
+
+    <p>The first two are the familiar sharpness-reducing terms from the single-eigenvector case. The third is a cross term that couples the two eigenvectors. Although $u_1^T H(\hat{w}) u_2 = 0$ by orthogonality, its gradient is generically nonzero, since the Hessian changes with $w$. This term means the self-stabilization of each eigenvalue depends on the oscillation amplitudes of the others, and the dynamics no longer decompose into independent systems.</p>
+
+    Unlike the previous case where only a single eigenvalue undergoes a strong self-stabilization effect, there are now two eigenvalues. We can write down a pair of equations describing how the sharpness changes at a time-averaged iterate $\bar{w}$ (which averages over both oscillations in the large eigenvectors AND the oscillations in sharpness), which now contain additional terms from the pair of eigenvalues.
+
+    $$\begin{aligned}
+    \frac{d\lambda_1}{dt} = \langle \nabla \lambda_1(\bar{w}), \nabla L(w) \rangle \approx\ &\underbrace{-\eta \langle \nabla \lambda_1(\bar{w}), \nabla L(w) \rangle}_{\text{progressive sharpening}} - \eta \langle \nabla \lambda_1, x_1 \lambda_1 u_1 \rangle \underbrace{- \eta \left\langle \nabla \lambda_1, \tfrac{x_1^2}{2} \nabla \lambda_1 \right\rangle}_{\text{self-stabilizing}} \\
+    &- \eta \langle \nabla \lambda_1, x_2 \lambda_2 u_2 \rangle - \eta \left\langle \nabla \lambda_1, \tfrac{x_2^2}{2} \nabla \lambda_2 \right\rangle - \eta \langle \nabla \lambda_1, x_1 x_2 \nabla(u_1^T H u_2) \rangle
+    \end{aligned}$$
+
+    $$\begin{aligned}
+    \frac{d\lambda_2}{dt} = \langle \nabla \lambda_2(\bar{w}), \nabla L(w) \rangle \approx\ &\underbrace{-\eta \langle \nabla \lambda_2(\bar{w}), \nabla L(w) \rangle}_{\text{progressive sharpening}} - \eta \langle \nabla \lambda_2, x_2 \lambda_2 u_2 \rangle \underbrace{- \eta \left\langle \nabla \lambda_2, \tfrac{x_2^2}{2} \nabla \lambda_2 \right\rangle}_{\text{self-stabilizing}} \\
+    &- \eta \langle \nabla \lambda_2, x_1 \lambda_1 u_1 \rangle - \eta \left\langle \nabla \lambda_2, \tfrac{x_1^2}{2} \nabla \lambda_1 \right\rangle - \eta \langle \nabla \lambda_2, x_1 x_2 \nabla(u_1^T H u_2) \rangle
+    \end{aligned}$$
+
+    It is no longer clear that the sharpness-reducing terms will dominate the dynamics, since the cross terms can counteract the single-eigenvector sharpness reduction effects. Extending the self-stability analysis to multiple eigenvalues is an open question because of this.
+
+    <p><strong>End sketchy argument.</strong></p>
+
+    We can, however, observe the behavior of multiple eigenvalues empirically. The experiment below visualizes multiple eigenvalues over training.
+    
+    <!-- Multi Eigenvalues:
+         Task: Chebyshev degree 4, 20 points, full-batch
+         Model: tanh, 2 hidden layers (30 + 30), seed 0
+         LR: 0.15, no step limit
+         Hessian: kEigs=3
+         Charts: train loss (no test, no EMA), sharpness (3 eigenvalues + 2/η)
+    -->
+    <div class="tutorial-widget">
+      <div class="tutorial-widget-controls">
+        <button id="multi-eigenvalues-start" class="sim-button">start</button>
+        <button id="multi-eigenvalues-reset" class="sim-button">reset</button>
+        <div class="gd-ctrl-group">
+          <label for="multi-eigenvalues-lr-slider">$\eta$:</label>
+          <input type="range" id="multi-eigenvalues-lr-slider"
+                 min="0.1" max="0.3" step="0.01" value="0.2">
+          <span id="multi-eigenvalues-lr-value" class="gd-ctrl-value">0.20</span>
+          <button id="multi-eigenvalues-lr-default" class="gd-ctrl-btn" title="Reset η to default (0.20)">↺ default</button>
+        </div>
+        <span id="multi-eigenvalues-info" class="tutorial-widget-info"></span>
+      </div>
+      <div class="tutorial-widget-charts">
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="multi-eigenvalues-loss" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="multi-eigenvalues-sharpness" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-norms">sharpness</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>Multiple eigenvalues of a MLP on a Chebyshev polynomial.</a></figcaption>
+    </div>
+
+    <p>Note that oscillations in the top eigenvalue tend to appear in the other eigenvalues. This is unsurprising: the sharpness gradients $\nabla\lambda_k$ for different eigenvalues are generally not orthogonal. When the direction of the gradient changes rapidly - e.g., at the EOS due to third order terms - it will result in large changes in all eigenvalues.</p>
+
+    <!-- ==================== SECTION: Relation to Gradient Flow ==================== -->
+
+    <h2>Relation to Gradient Flow</h2>
+
+    <p>Earlier, we mentioned that in the limit of infinitesimal learning rates, gradient descent becomes a continuous differential equation called <strong>gradient flow</strong>:</p>
+
+    $$\frac{d w(t)}{dt} = - \nabla L(w(t))$$
+
+    <p>Gradient flow is much easier to analyze than discrete gradient descent — it removes the discretization effects that cause oscillations and instability. But how well does it approximate real training at finite learning rates?</p>
+
+    <p>It turns out the approximation is excellent, <strong>when the sharpness stays below the $2/\eta$ threshold</strong>. In this regime, networks trained with different learning rates follow nearly identical trajectories in both loss and sharpness when plotted against rescaled time $\eta \cdot \text{step}$. You can verify this in the experiment below: run multiple learning rates with "η·step" plotting and observe that the curves overlap until each one hits its own stability threshold.</p>
+
+
+    <!-- Gradient Flow Comparison:
+         3 learning rates on shared charts (MultiSimulation with proportional stepping)
+         Task: Chebyshev degree 4, 20 points, full-batch
+         Model: tanh, 2 hidden layers (30 + 30), seed 0
+         LRs: 0.15, 0.1, 0.075 (dashed, dotted, solid)
+         StepsPerTick: 4, 6, 8 (so step×η ≈ equal per tick)
+         Max steps: 13333 / 20000 / 26667 (so total step×η ≈ 2000 each)
+         Hessian: kEigs=1, numIters=10, maxIters=30 (fast, top-1 only)
+    -->
+    <div class="tutorial-widget">
+      <div class="tutorial-widget-controls">
+        <button id="gradient-flow-start" class="sim-button">start</button>
+        <button id="gradient-flow-reset" class="sim-button">reset</button>
+        <span style="margin-left: 1em;">plot w.r.t.</span>
+        <span id="gradient-flow-xaxis-toggle" class="plot-xaxis-toggle" style="margin-left: 0.3em;">
+          <a href="#" data-mode="step" class="active">step</a><a href="#" data-mode="teff">$\eta \cdot \mathrm{step}$</a>
+        </span>
+        <span id="gradient-flow-info" class="tutorial-widget-info"></span>
+      </div>
+      <div class="tutorial-widget-charts">
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="gradient-flow-loss" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+        <div class="tutorial-widget-chart">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="gradient-flow-sharpness" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-norms">sharpness</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p>Once sharpness reaches $2/\eta$, the curves diverge. Each learning rate hits the threshold at a different point in rescaled time, and the EOS dynamics — oscillations, loss spikes, self-stabilization — take over. The edge of stability marks where gradient flow breaks down as a model of training.</p>
+
+    <p>How can we analyze optimization trajectories beyond this threshold? While the discrete dynamics are complicated and noisy, it turns out the analysis is quite nice if we average over the rapid oscillations at the edge of stability. This is the idea behind <strong>central flow</strong>,<sup><a href="#ref-cohen2024">[3]</a></sup> which builds on the third-order Taylor analysis from the previous section. Using $\mathbb{E}$ to denote a time average over the oscillations, we obtain the following expression for the time averaged gradient:</p>
+
+    $$\mathbb{E}\left[\nabla L(\hat{w} + x u)\right] = \underset{\text{gradient at time-averaged }w \approx \hat{w}}{\mathbb{E}\left[\nabla L (\hat{w}) \right]} + \underset{\text{time averages to 0}}{\mathbb{E}\left[x \lambda (\hat{w}) u \right]} + \underset{\text{sharpness penalty}}{\mathbb{E}\left[\frac{1}{2}x^2 \nabla \lambda (\hat{w}) \right]} + O(x^3 \|u\|^3)$$
+
+    <p>Thus the time averaged gradient is the gradient at the time averaged parameter $\hat{w}$, plus a sharpness penalty that pushes the network towards flatter regions of parameter space. The oscillatory term averages to zero, so the mean trajectory is determined by the interplay between the original gradient and the sharpness penalty. The penalty is proportional to the square of the oscillation amplitude.</p>
+
+    <p>This motivates the following ansatz for the time-averaged trajectory of gradient descent:</p>
+
+    <p>$$
+    \frac{d \hat{w}(t)}{dt} = - \eta \left[\nabla L(\hat{w}(t)) + \underset{\text{sharpness penalty}}{\frac{1}{2}\sigma^2 (t) \nabla \lambda (\hat{w}(t))} \right]
+    $$</p>
+
+    <p>where $\sigma^2 (t)$ is a quantity that models the square of the oscillation amplitude. This unknown quantity can be solved for under the condition that the sharpness <strong>of the time-averaged trajectory</strong> stays constant at the $2/\eta$ threshold.</p>
+
+    <p>This results in a simplified extension of gradient flow that models the mean trajectory of gradient descent even in the edge of stability regime. We show an example of the central flow trajectory for CIFAR10 below, showing the loss and sharpness curves that smooth out the noisy oscillations of gradient descent:</p>
+
+    <figure class="tutorial-figure">
+      <img src="imgs/centralflow.png" alt="Examples of progressive sharpening" style="max-width: 70%;">
+      <figcaption>Central flow (black, dashed) approximates the true behaviour of a neural network (blue), but with the loss spikes averaged out. The idea behind central flows is shown nicely by looking at the sharpness, where we see it enforces a condition keeping the sharpness at the edge of stability instead of oscillating. Results shown for a MLP on a 4 class 1000 example subset of CIFAR-10.</figcaption>
+    </figure>
+      
+    <p>For more details, see this <a href="https://centralflows.github.io/">blog post on central flows</a>.</p>
+
+    <!--
+    By averaging over oscillations, we can separate the slow drift of the network from the fast oscillatory behavior, yielding a simpler differential equation that describes the network's mean trajectory. For details, see the <a href="https://centralflows.github.io/">companion blog post</a>.</p>
+
+    <p>So how do we describe the trajectory beyond this threshold? One approach is <strong>central flow</strong>,<sup><a href="#ref-cohen2024">[3]</a></sup> which builds on the third-order Taylor analysis from the previous section. The idea is to average over the rapid oscillations at the edge of stability, separating the slow drift of the network from the fast oscillatory behavior. The progressive sharpening and self-stabilization terms partially cancel in this average, yielding a simpler differential equation that describes the network's mean trajectory. For details, see the <a href="https://centralflows.github.io/">companion blog post</a>.</p>-->
+
+    <h2>Optimizers And Related Phenomena</h2>
+
+    <p>So far, we've analyzed full-batch gradient descent — the simplest optimization algorithm. In practice, neural networks are trained with momentum, adaptive optimizers, and stochastic minibatches. How do these modifications interact with the edge of stability?</p>
+
+    <figure class="tutorial-figure">
+      <img src="imgs/momentum_eos_comparison.png" alt="Momentum changes the EOS threshold" style="max-width: 55%;">
+      <figcaption>Training a MLP on a subset of CIFAR10 with full batch GD and momentum. Momentum results in a different (calculable) EOS threshold. <strong>Not depicted: </strong> Adam, SGD. Both Adam and SGD optimizers change every epoch (Adam from a pre-conditioner, SGD from noise), so a fixed sharpness threshold is not well defined.</figcaption>
+    </figure>
+
+    <h3>Momentum</h3>
+
+    <p>Momentum involves maintaining a velocity term that accumulates past gradients. This accelerates convergence along consistent gradient directions, and can help escape flat regions with low gradients. But it also has interesting interactions with curvature and the edge of stability. Its effects can be analyzed by studying the quadratic case again. Here, we'll go through Polyak (heavy ball) momentum, which is closely related to the momentum used in practical optimizers like Adam:</p>
+
+    <p>$$v_{t+1} = \beta v_t - \eta \nabla L(x_t)$$</p>
+    <p>$$x_{t+1} = x_t + v_{t+1}$$</p>
+
+    <p>The momentum coefficient $\beta$ controls how much past gradients are accumulated. For $\beta = 0$, this reduces to plain gradient descent.</p>
+
+    <p>On a 1D quadratic $L(x_t) = \frac{1}{2}Sx^2$, we use $\nabla L(x_t) = Sx_t$ and $v_t = x_t - x_{t-1}$ to obtain a second-order recurrence in $x_t$ alone:</p>
+
+    <p>$$x_{t+1} = (1 + \beta - \eta S)x_t - \beta x_{t-1}$$</p>
+
+    <p>This is a linear second-order recurrence. Standard results on such recurrences <sup><a href="#ref-elaydi2005">[3]</a></sup> show that it diverges when:</p>
+
+    <p>$$S > \frac{2(1+\beta)}{\eta}$$</p>
+
+    <p>which is larger than the standard edge of stability $2/\eta$. In this case, momentum makes it possible to train in regions of higher curvature. This extends to the multidimensional case, with the stability threshold again applying to the largest eigenvalue. The self-stabilization analysis from the previous section also applies beyond this threshold, ensuring the sharpness is fixed at the new critical threshold $\frac{2(1+\beta)}{\eta}$.</p>
+
+    <p>We can repeat this analysis for other types of momentum, which yield different results (e.g., Nesterov momentum yields $\frac{1}{\eta} \left( \frac{2 + 2 \beta}{1 + 2 \beta}\right)$, which means it is more unstable than vanilla GD).</p>
+
+    <h3>Adam And Other Adaptive Optimizers</h3>
+
+    <p>Adaptive gradient methods like Adam adjust their learning rates per-parameter based on recent gradient history. Why Adam is so effective at optimizing large neural networks may be partially explained by its interaction with the edge of stability.</p>
+
+    <p>Our analysis so far has assumed a single learning rate shared across all parameters. With per-parameter learning rates, the stability analysis changes: instead of the eigenvalues of the Hessian $H$, the relevant quantities are the eigenvalues of $PH$, where $P$ is a diagonal matrix of per-parameter learning rates. A properly chosen set of learning rates $P$ can in theory reduce the large eigenvalues while at the same time ensuring fast convergence among the smaller eigenvalues.</p>
+
+    <p>This turns out to be what adaptive optimizers do: by maintaining a running estimate of each parameter's gradient variance, they detect which parameters oscillate heavily, and automatically reduce the associated learning rates. This suppresses oscillations in directions that cause instability <sup><a href="#ref-cohen2022adaptive">[3]</a></sup>. This is more effective than waiting for the slow self-stabilization mechanism to steer the network out of the unstable region, and may explain why Adam requires less learning rate tuning than plain gradient descent.</p>
+    <h3>Stochastic Gradient Descent</h3>
+
+    <p>Stochastic minibatches introduce noise into the gradient estimation. Although issues with large learning rates and stability still occur, the typical signs of edge of stability - loss spikes and a clear sharpness cutoff - are harder to detect since loss is inherently erratic under SGD, and there is plenty of noise in the per batch sharpness values.
+      
+    <p>On the theoretical side, much of our analysis assumed full-batch gradients, where the loss landscape is the same over mutliple steps. In SGD, this assumption is no longer valid, and our analysis of effects such as self-stability does not necessarily hold since the directions involved may change constantly.</p>
+
+    <p>On the empirical side, it has been observed that for fairly large batch sizes much of the previously discussed edge of stability behaviour still arises. We invite interested readers to explore with the interactive experiments at the bottom of this article.</p>
+
+    <div class="preset-buttons">
+    <button class="load-runs-button" data-load-runs="runs/sgd/cheby_sgd_full.json,runs/sgd/cheby_sgd_larger_batch.json,runs/sgd/cheby_sgd_eos.json">SGD Example</button>
+    </div>
+
+    <h3>Catapults</h3>
+
+    <p>Throughout this article, we've assumed the learning rate is small enough that training starts in the stable regime, with sharpness gradually rising to meet the $2/\eta$ threshold. But what happens when the initial sharpness already exceeds $2/\eta$, without any progressive sharpening? There are two regimes depending on how large the learning rate is:<sup><a href="#ref-lewkowycz2020">[4]</a></sup></p>
+    <ul>
+      <li><strong>Catapult phase:</strong> The learning rate is not too large, and the sharpness initially drops. The model is able to learn successfully here.</li>
+      <li><strong>Divergent phase:</strong> The learning rate is too large, and the model diverges without learning anything.</li>
+    </ul>
+
+    <p>The boundary between these regimes depends on the specific loss landscape and initialization. You can explore this in the playground below by setting a large initial learning rate and observing whether the network recovers or diverges.</p>
+
+    <div class="preset-buttons">
+    <button class="load-runs-button" data-load-runs="runs/learning_rate/catapult_phase.json,runs/learning_rate/default_phase.json,runs/learning_rate/unstable_phase.json">Three Learning Rate Regimes Example</button>
+    </div>
+
+    <!-- ==================== SECTION: Observations ==================== -->
+
+    <h2>Exploration</h2>
+
+    <p>Here, we provide settings to run experiments at the bottom. While real sharpness experiments on tasks like CIFAR-10 take hours — the defaults here are designed to reach the edge of stability very quickly. We invite readers to play around with parameter choices, and either verify our above statements regarding the existence of the edge of stability, or investigate parameters that we did not discuss. A notable example is the treatment on network width and depth: although these will not affect self-stability, they will affect progressive sharpening, and understanding their exact relationship is still unknown.</p>
+
+    <p>For those interested in details on experiments on progressive sharpening, along with these experiments we refer readers to the appendix of the original paper on the edge of stability.<sup><a href="#ref-cohen2021">[1]</a></sup></p>
+
+  </div><!-- end .tutorial-content -->
+  <!-- ============================================================ -->
+  <!-- PLAYGROUND (existing SETUP + SIMULATION, unchanged) -->
+  <!-- ============================================================ -->
+
+  <hr style="border: none; border-top: 2px solid #ccc; margin-top: 2em; margin-bottom: 0.2em;">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+    <div class="section-label" style="margin-bottom: 0;">SETUP</div>
+    <button id="resetToDefaultsButton" class="sim-button">reset to defaults</button>
+  </div>
+
+  <div style="margin-top: 0; margin-bottom: 2em;">
+
+    <!-- Row 1: Network (Red) with diagram -->
+    <div style="display: flex; gap: 1em; margin-bottom: 1em;">
+      <div style="background-color: #fff0f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; position: relative; min-height: 100px; flex: 1;">
+        <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc5555; white-space: pre;">    NETWORK</div>
+        <div style="display: flex; gap: 2em; margin-left: 60px; flex-wrap: wrap; align-items: flex-start;">
+
+          <!-- Activation -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">activation</div>
+            <select id="activationSelect" style="font-size: 15px; padding: 4px 8px;">
+              <option value="tanh">tanh</option>
+              <option value="relu">ReLU</option>
+              <option value="gelu">GeLU</option>
+              <option value="linear">linear</option>
+            </select>
+          </div>
+
+          <!-- Hidden dim 1 -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim 1</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <input type="range" id="hiddenDim1Slider" min="0" max="100" value="50" style="width: 120px;">
+              <span id="hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">100</span>
+            </div>
+          </div>
+
+          <!-- Second layer option -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">second layer</div>
+            <label style="font-size: 14px;">
+              <input type="checkbox" id="useSecondLayerCheckbox">
+              add layer
+            </label>
+            <div id="hiddenDim2Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <span style="font-size: 14px;">dim:</span>
+              <input type="range" id="hiddenDim2Slider" min="0" max="100" value="50" style="width: 100px;">
+              <span id="hiddenDim2Value" style="font-size: 14px; min-width: 40px; text-align: left;">50</span>
+            </div>
+          </div>
+
+          <!-- Model seed -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <input type="number" id="modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Network SVG -->
+      <div style="display: flex; justify-content: center; align-items: center; flex-shrink: 0;">
+        <svg id="networkViz" width="400"></svg>
+      </div>
+    </div>
+
+    <!-- Row 2: Task (Orange) -->
+    <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+      <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+        <!-- Left group: task selector + params + formula -->
+        <div style="display: flex; gap: 2em; align-items: flex-start; flex-wrap: wrap; flex: 1;">
+          <!-- Task selector -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">dataset</div>
+            <select id="taskSelect" style="font-size: 15px; padding: 4px 8px;">
+            </select>
+          </div>
+
+          <!-- Task-specific params (dynamically populated) -->
+          <div id="taskParamsContainer" style="display: flex; flex-direction: column; gap: 4px;"></div>
+
+          <!-- Task formula (dynamically populated) -->
+          <div id="taskFormulaContainer" style="text-align: center;"></div>
+        </div>
+
+        <!-- Right group: test set (separate column) -->
+        <div style="text-align: center; flex-shrink: 0; border-left: 1px solid #e0d0c0; padding-left: 2em;">
+          <div id="testSetContainer"></div>
+        </div>
+      </div>
+
+      <!-- Recommended defaults (dynamically populated) -->
+      <div id="recommendedContainer" style="margin-left: 60px; margin-top: 12px;"></div>
+    </div>
+    <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+      <div style="display: flex; gap: 2em; margin-left: 60px;">
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <span style="font-size: 16px;">$\eta$:</span>
+            <input type="range" id="etaSlider" min="0" max="100" value="50" style="width: 120px;">
+            <span id="etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.01</span>
+          </div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">batch size</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <span style="font-size: 16px;">$|B|$:</span>
+            <input type="range" id="batchSizeSlider" min="0" max="100" value="50" style="width: 120px;">
+            <span id="batchSizeValue" style="font-size: 15px; min-width: 60px; text-align: left;">20</span>
+          </div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+          <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2Nd}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+          <div style="font-size: 12px; margin-top: 4px; color: #999;">$d$ = output dimension</div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">initialization (muP)</div>
+          <div style="margin-top: 6px;">$$W_{ij}^{(\ell)} \sim \mathcal{N}\!\left(0,\, \frac{1}{n_{\ell-1}}\right)$$</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr style="border: none; border-top: 2px solid #ccc; margin-top: 2em; margin-bottom: 0.2em;">
+
+  <div class="section-label">SIMULATION</div>
+
+  <div style="margin-top: 1em; margin-bottom: 2em;">
+    <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+      <button id="startPauseButton" class="sim-button">start</button>
+      <button id="resetButton" class="sim-button">reset</button>
+      <button id="saveRunButton" class="sim-button">save run</button>
+    </div>
+
+    <!-- Plots -->
+    <div class="plots-container">
+      <div class="plot-wrapper">
+        <div class="plot-box">
+          <div class="plot-content">
+            <canvas id="lossChart" class="plot-canvas"></canvas>
+            <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+            <div class="x-axis-label">step</div>
+          </div>
+        </div>
+      </div>
+      <div class="plot-wrapper">
+        <div class="plot-box">
+          <div class="plot-content">
+            <canvas id="rightChart" class="plot-canvas"></canvas>
+            <div class="y-axis-label y-axis-label-norms">sharpness</div>
+            <div class="x-axis-label">step</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plot controls -->
+    <div class="logscale-control">
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="logScaleXCheckbox">
+        logscale x-axes
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="logScaleCheckbox">
+        logscale y-axes
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="clipSharpnessCheckbox" checked>
+        clip sharpness (3× threshold)
+      </label>
+      <span style="margin-right: 0.5em;">plot w.r.t.</span>
+      <span class="plot-xaxis-toggle">
+        <a href="#" id="step-link" class="active">step</a><a href="#" id="teff-link">$\eta \cdot \mathrm{step}$</a>
+      </span>
+      <span style="margin-left: 30px; display: inline-flex; align-items: center; gap: 8px;">
+        <span>EMA:</span>
+        <input type="range" id="emaSlider" min="0" max="100" value="0" style="width: 120px;">
+        <span id="emaValue" style="min-width: 30px; text-align: left;">off</span>
+      </span>
+    </div>
+
+    <!-- Steps per second -->
+    <div style="margin-top: 1.5em; text-align: center; color: #666; font-size: 14px;">
+      <label>steps/sec:</label>
+      <span id="stepsPerSec" style="font-weight: bold;">—</span>
+    </div>
+  </div>
+
+  <!-- Saved Runs -->
+  <div style="margin-bottom: 2em;">
+    <button id="toggleSavedRuns" class="sim-button" style="width: 100%;">show saved runs (<span id="savedRunCount">0</span>)</button>
+    <div id="savedRunsPanel" style="display: none; margin-top: 1em;">
+      <!-- Overlay charts -->
+      <div class="plots-container" style="margin-bottom: 1em;">
+        <div class="plot-wrapper">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="savedLossChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+              <div class="x-axis-label" id="savedLossXLabel">η·step</div>
+            </div>
+          </div>
+        </div>
+        <div class="plot-wrapper">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="savedSharpnessChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-norms">sharpness</div>
+              <div class="x-axis-label" id="savedSharpnessXLabel">η·step</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Plot controls (below charts, matching main playground style) -->
+      <div class="logscale-control">
+        <label style="margin-right: 20px;">
+          <input type="checkbox" id="savedRunsClipSharpness" checked>
+          clip sharpness (3× threshold)
+        </label>
+        <span style="margin-right: 0.5em;">plot w.r.t.</span>
+        <span id="savedRunsXAxisToggle" class="plot-xaxis-toggle">
+          <a href="#" data-mode="step">step</a><a href="#" data-mode="teff" class="active">$\eta \cdot \mathrm{step}$</a>
+        </span>
+      </div>
+      <!-- Run list -->
+      <div id="savedRunList"></div>
+      <div style="margin-top: 0.8em; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <button id="uploadRunButton" class="sim-button" style="font-size: 12px;">upload run JSON</button>
+          <input type="file" id="uploadRunInput" accept=".json" style="display: none;">
+          <span id="uploadRunStatus" style="font-size: 12px; color: #888; margin-left: 8px;"></span>
+        </div>
+        <button id="clearSavedRuns" class="sim-button" style="font-size: 12px;">clear all</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== FOOTNOTES ==================== -->
+
+  <h2>Footnotes</h2>
+  <details class="accordion" id="footnote-smoothness">
+    <summary>On the Guaranteed Loss Decreases</summary>
+    <div class="accordion-body">
+      <p>More precisely, if $\nabla L$ is $M$-Lipschitz continuous (i.e., the curvature is bounded everywhere by $M$), then choosing $\eta < \frac{2}{M}$ guarantees monotone descent <sup><a href="#ref-nesterov2018">[3]</a></sup>. This is a <em>global</em> condition &mdash; it requires a learning rate conservative enough to work everywhere in parameter space. The $\frac{2}{\lambda_{\max}}$ threshold from the quadratic analysis is a <em>local</em> condition: it depends on the curvature at the current iterate, which changes during training. </p>
+      
+      <p>It is possible for the local condition to be satisfied at every point visited, yet violated globally (e.g., an extremely sharp minimum exists far from the training trajectory, with curvature $>>M$).</p>
+    </div>
+  </details>
+  <details class="accordion" id="footnote-hessian">
+    <summary>On Hessian Eigenvalue Computation</summary>
+    <div class="accordion-body">
+      <p>The Hessian $\nabla^2 L$ is a $p \times p$ matrix of second derivatives, where $p$ is the number of parameters. Computing it fully and solving for all eigenvalues would be prohibitively expensive. Fortunately, we only need the top few eigenvalues and eigenvectors, which is significantly easier.</p>
+
+      <p>The simplest approach is <strong>power iteration</strong>. Start with a random vector $v_0$ — it will almost certainly have nonzero components along every eigenvector of the Hessian. Repeatedly multiplying by the Hessian (and normalizing) amplifies each component by its eigenvalue. After many iterations, the largest eigenvalue's component dominates, and $v_{k+1} = H v_k / \|H v_k\|$ converges to the top eigenvector. Finding the eigenvectors of a large $p \times p$ matrix is now replaced by a handful of matrix multiplications.</p>
+
+      <p>In practice, we use a more efficient algorithm called <strong>Lanczos iteration</strong>. Rather than discarding intermediate vectors, Lanczos retains the full history of vectors produced during each Hessian-vector product. This history can be used to more accurately obtain multiple top eigenvalues and eigenvectors. We run 20 Lanczos iterations, which can in principle recover up to 20 eigenvalues — though accuracy degrades for the smaller ones.</p>
+
+      <p>Note we never need the full Hessian matrix — only Hessian-vector products $Hv$. Since the Hessian is the Jacobian of the gradient, the product $Hv$ can be rewritten as a directional derivative of the gradient:</p>
+
+      $$Hv = \lim_{\varepsilon \to 0} \frac{\nabla L(w + \varepsilon v) - \nabla L(w)}{\varepsilon}$$
+
+      <p>This requires only two gradient evaluations rather than computing all $p^2$ entries of $H$. Our implementation approximates this with finite differences at $\varepsilon = 10^{-5}$:</p>
+
+      $$Hv \approx \frac{\nabla L(w + \varepsilon v) - \nabla L(w - \varepsilon v)}{2\varepsilon}$$
+
+      <p>This is computationally cheap and avoids second-order backpropagation. However, this produces issues with ReLU where the choice of $\varepsilon$ can cause spurious spikes due to the non-smoothness of the activation.</p>
+    </div>
+  </details>
+
+  <!-- ==================== REFERENCES ==================== -->
+
+  <h2>References</h2>
+  <ol class="references">
+    <li id="ref-cohen2021">Cohen, J., Kaur, S., Li, Y., Kolter, J.Z., &amp; Talwalkar, A. (2021). Gradient Descent on Neural Networks Typically Occurs at the Edge of Stability. <em>ICLR 2021.</em> <a href="https://arxiv.org/abs/2103.00065">arXiv</a></li>
+    <li id="ref-damian2022">Damian, A., Nichani, E., &amp; Lee, J.D. (2022). Self-Stabilization: The Implicit Bias of Gradient Descent at the Edge of Stability. <em>ICLR 2023.</em> <a href="https://arxiv.org/abs/2209.15594">arXiv</a></li>
+    <li id="ref-cohen2022adaptive">Cohen, J.M., Ghorbani, B., Krishnan, S., Agarwal, N., Medapati, S., Badura, M., Suo, D., Cardoze, D., Nado, Z., Dahl, G.E., &amp; Gilmer, J. (2022). Adaptive Gradient Methods at the Edge of Stability. <em>arXiv preprint arXiv:2207.14484</em>. <a href="https://arxiv.org/abs/2207.14484">arXiv</a></li>
+    <li id="ref-cohen2024">Cohen, J.M., Damian, A., Talwalkar, A., Kolter, J.Z., &amp; Lee, J.D. (2024). Understanding Optimization in Deep Learning with Central Flows. <a href="https://arxiv.org/abs/2410.24206">arXiv</a></li>
+    <li id="ref-nesterov2018">Nesterov, Y. (2018). <em>Lectures on Convex Optimization</em> (2nd ed.). Springer. (See Section 1.2.3 for the descent lemma).</li>
+    <li id="ref-elaydi2005">Elaydi, S. (2005). <em>An Introduction to Difference Equations</em> (3rd ed.). Springer. (See Theorem 2.37 for the stability criterion for second-order linear recurrences).</li>
+    <li id="ref-lewkowycz2020">Lewkowycz, A., Bahri, Y., Dyer, E., Sohl-Dickstein, J., &amp; Gur-Ari, G. (2020). The Large Learning Rate Phase of Deep Learning: the Catapult Mechanism. <a href="https://arxiv.org/abs/2003.02218">arXiv</a></li>
+  </ol>
+
+</div>
+
+<!-- Interactive GD widgets -->
+<script type="module">
+  import { GDQuadPair }    from './gd_quadratic.js';
+  import { GDQuadratic2D } from './gd_quadratic2d.js';
+
+  function initWidgets() {
+    // ---- 1-D quadratic: converging vs diverging ----
+    new GDQuadPair({
+      leftCanvasId:  'idx-gd-conv-canvas',
+      rightCanvasId: 'idx-gd-div-canvas',
+      etaSliderId:   'idx-gd-eta-slider',
+      etaValueId:    'idx-gd-eta-value',
+      resetButtonId: 'idx-gd-reset-btn',
+      S_conv:  1.3,
+      S_div:   2.0,
+      eta:     1.2,
+      theta0:  -0.6,
+      nSteps:  7,
+      viewport: { thetaMin: -1.5, thetaMax: 1.5, lossMin: -0.2, lossMax: 1.5 },
+    });
+
+    // ---- 2-D rotated quadratic ----
+    new GDQuadratic2D({
+      canvasId:     'idx-q2d-canvas',
+      lam1SliderId: 'idx-q2d-lam1-slider', lam1ValueId: 'idx-q2d-lam1-value',
+      lam2SliderId: 'idx-q2d-lam2-slider', lam2ValueId: 'idx-q2d-lam2-value',
+      etaSliderId:  'idx-q2d-eta-slider',  etaValueId:  'idx-q2d-eta-value',
+      resetButtonId:'idx-q2d-reset-btn',
+      defaults: { lam1: 8.0, lam2: 0.5, angleDeg: 60, eta: 0.27, w0: [-1.6, 1.6] },
+    });
+  }
+
+  function waitForMathJax(attempts = 0) {
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+      window.MathJax.startup.promise.then(initWidgets).catch(() => initWidgets());
+    } else if (attempts < 30) {
+      setTimeout(() => waitForMathJax(attempts + 1), 50);
+    } else {
+      initWidgets();
+    }
+  }
+
+  waitForMathJax();
+</script>
+
+<!-- Dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+
+<!-- Application (ES6 module) -->
+<script type="module" src="app.js"></script>
+
+<!-- Weight-space trajectory viewer -->
+<script type="module" src="interactive_3d.js"></script>
+
+<!-- Function 5 widget -->
+<script type="module" src="dsn5.js"></script>
+
+</body>
+</html>

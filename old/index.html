@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Linear Networks</title>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: { scale: 1.0 },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Shared widget styles (scoped so they don't bleed into blog prose) ── */
+    .sv-editor { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+    .sv-row { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+    .sv-row .sv-label { font-size: 14px; color: #555; font-family: serif; font-style: italic; }
+    .sv-row input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .sv-row input[type="number"]:focus { outline: none; border-color: #cc8855; }
+    .inline-row { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+    .inline-field { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555; }
+    .inline-field input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .details-panel { display: none; margin-top: 1em; padding-top: 1em; border-top: 1px dashed #d8c0c0; }
+    .details-panel.task-details { border-top-color: #e0d0c0; }
+    .sv-warning { font-size: 12px; color: #aa4444; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+
+<div class="container tutorial-content">
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       BLOG CONTENT — replace placeholder text with your actual writing
+       ═══════════════════════════════════════════════════════════════════════ -->
+
+  <h2>Introduction</h2>
+  <p>Your blog post content goes here…</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       WIDGET 1 — Single hidden layer
+       ═══════════════════════════════════════════════════════════════════════ -->
+
+  <div class="tutorial-widget">
+
+    <!-- TASK panel -->
+    <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+
+      <div style="margin-left: 60px;">
+
+        <!-- Input mode -->
+        <div class="inline-row" style="margin-bottom: 0.7em; gap: 18px;">
+          <span style="font-size: 14px; color: #555;">Inputs:</span>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w1-inputMode" id="w1-inputModeWhitened" value="whitened">
+            Whitened (exact $\Sigma_x = I$)
+          </label>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w1-inputMode" id="w1-inputModeGaussian" value="gaussian">
+            iid Gaussian $\mathcal{N}(0, I)$
+          </label>
+        </div>
+        <div id="w1-inputModeWarning" style="font-size: 12px; color: #aa4444; margin-bottom: 0.7em; display: none;"></div>
+
+        <!-- Data params -->
+        <div id="w1-dataParamsContainer" class="inline-row" style="margin-bottom: 1em;"></div>
+
+        <!-- Init mode -->
+        <div class="inline-row" style="margin-bottom: 1em; gap: 18px;">
+          <span style="font-size: 14px; color: #555;">Initialization:</span>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w1-initMode" id="w1-initModeRandom" value="random">
+            Random Gaussian
+          </label>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w1-initMode" id="w1-initModeAligned" value="aligned">
+            Aligned to SVD basis
+          </label>
+        </div>
+
+        <!-- Collapsible toggle buttons -->
+        <div style="display: flex; gap: 0.6em; flex-wrap: wrap; margin-bottom: 0.2em;">
+          <button id="w1-toggleModelDetailsButton" class="sim-button" type="button">show model details</button>
+          <button id="w1-toggleFunctionDetailsButton" class="sim-button" type="button">show function details</button>
+        </div>
+
+        <!-- Model details panel -->
+        <div id="w1-modelDetailsPanel" class="details-panel task-details">
+          <div style="display: flex; gap: 2em; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1.2em;">
+
+            <!-- Hidden dim 1 only — no layer toggles -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="range" id="w1-hiddenDim1Slider" min="1" max="200" value="30" style="width: 120px;">
+                <span id="w1-hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">30</span>
+              </div>
+            </div>
+
+            <!-- Model seed -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="number" id="w1-modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Random O row (aligned init only) -->
+          <div id="w1-randomORow" class="inline-row" style="margin-bottom: 1em; display: none;">
+            <label class="inline-field" style="font-size: 14px;">
+              <input type="checkbox" id="w1-randomOCheckbox">
+              Random orthogonal matrices $O$ (otherwise $O = I$)
+            </label>
+          </div>
+
+          <div id="w1-weightCaption" style="font-size: 12px; color: #999;">
+            Weights: $W_{ij}^{(\ell)} \sim \mathcal{N}(0,\, \varepsilon^2/n_{\ell-1})$
+          </div>
+        </div>
+
+        <!-- Function details panel -->
+        <div id="w1-functionDetailsPanel" class="details-panel task-details">
+          <div style="font-size: 15px; color: #666; margin-bottom: 10px;">
+            Ground Truth Matrix $W^\star$
+          </div>
+          <div id="w1-dimInputs" class="inline-row" style="margin-bottom: 12px;"></div>
+          <div style="font-size: 14px; color: #666; margin-bottom: 6px;">
+            Singular Values $\sigma_m$ <span style="font-size: 12px; color: #999;">— Type any value</span>
+          </div>
+          <div id="w1-svEditor" class="sv-editor"></div>
+          <div id="w1-svWarning" class="sv-warning"></div>
+          <div id="w1-basisOptions" class="inline-row" style="margin-top: 14px;"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TRAINING panel -->
+    <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+      <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <span style="font-size: 16px;">$\eta$:</span>
+            <input type="range" id="w1-etaSlider" min="0" max="100" value="50" style="width: 120px;">
+            <span id="w1-etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.6</span>
+          </div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">init scale $\varepsilon$</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <input type="range" id="w1-initScaleSlider" min="0" max="100" value="50" style="width: 120px;">
+            <input type="number" id="w1-initScaleNumber" min="0" step="any" value="0.01" style="width: 80px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px;">
+          </div>
+          <div style="font-size: 11px; color: #999; margin-top: 4px;">slider 0.0001–1; type any value</div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+          <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2N}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+          <div style="font-size: 12px; margin-top: 4px; color: #999;">full-batch ($|B| = N$)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <hr style="border: none; border-top: 2px solid #ccc; margin-bottom: 0.2em;">
+    <div class="section-label">SIMULATION</div>
+
+    <div style="margin-top: 1em; margin-bottom: 1em;">
+      <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+        <button id="w1-startPauseButton" class="sim-button">start</button>
+        <button id="w1-resetButton" class="sim-button">reset</button>
+      </div>
+
+      <div class="plots-container">
+        <div class="plot-wrapper">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="w1-lossChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+        <div class="plot-wrapper">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="w1-rightChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-norms">sharpness</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 1em; text-align: center; color: #666; font-size: 14px;">
+        <label>steps/sec:</label>
+        <span id="w1-stepsPerSec" style="font-weight: bold;">—</span>
+      </div>
+    </div>
+
+    <p class="widget-caption">Widget 1: single hidden layer. Theory prediction always shown (dotted).</p>
+  </div><!-- /tutorial-widget 1 -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MORE BLOG CONTENT between widgets
+       ═══════════════════════════════════════════════════════════════════════ -->
+
+  <h2>Generalizing to More Layers</h2>
+  <p>Your blog post content goes here…</p>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       WIDGET 2 — Multi-layer (1–3 hidden layers)
+       ═══════════════════════════════════════════════════════════════════════ -->
+
+  <div class="tutorial-widget">
+
+    <!-- TASK panel -->
+    <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+
+      <div style="margin-left: 60px;">
+
+        <!-- Input mode -->
+        <div class="inline-row" style="margin-bottom: 0.7em; gap: 18px;">
+          <span style="font-size: 14px; color: #555;">Inputs:</span>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w2-inputMode" id="w2-inputModeWhitened" value="whitened">
+            Whitened (exact $\Sigma_x = I$)
+          </label>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w2-inputMode" id="w2-inputModeGaussian" value="gaussian">
+            iid Gaussian $\mathcal{N}(0, I)$
+          </label>
+        </div>
+        <div id="w2-inputModeWarning" style="font-size: 12px; color: #aa4444; margin-bottom: 0.7em; display: none;"></div>
+
+        <!-- Data params -->
+        <div id="w2-dataParamsContainer" class="inline-row" style="margin-bottom: 1em;"></div>
+
+        <!-- Init mode -->
+        <div class="inline-row" style="margin-bottom: 1em; gap: 18px;">
+          <span style="font-size: 14px; color: #555;">Initialization:</span>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w2-initMode" id="w2-initModeRandom" value="random">
+            Random Gaussian
+          </label>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="w2-initMode" id="w2-initModeAligned" value="aligned">
+            Aligned to SVD basis
+          </label>
+        </div>
+
+        <!-- Collapsible toggle buttons -->
+        <div style="display: flex; gap: 0.6em; flex-wrap: wrap; margin-bottom: 0.2em;">
+          <button id="w2-toggleModelDetailsButton" class="sim-button" type="button">show model details</button>
+          <button id="w2-toggleFunctionDetailsButton" class="sim-button" type="button">show function details</button>
+        </div>
+
+        <!-- Model details panel -->
+        <div id="w2-modelDetailsPanel" class="details-panel task-details">
+          <div style="display: flex; gap: 2em; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1.2em;">
+
+            <!-- Hidden dim 1 -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim 1</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="range" id="w2-hiddenDim1Slider" min="1" max="200" value="30" style="width: 120px;">
+                <span id="w2-hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">30</span>
+              </div>
+            </div>
+
+            <!-- Second layer -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">second layer</div>
+              <label style="font-size: 14px;">
+                <input type="checkbox" id="w2-useSecondLayerCheckbox"> add layer
+              </label>
+              <div id="w2-hiddenDim2Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <span style="font-size: 14px;">dim:</span>
+                <input type="range" id="w2-hiddenDim2Slider" min="1" max="200" value="20" style="width: 100px;">
+                <span id="w2-hiddenDim2Value" style="font-size: 14px; min-width: 40px; text-align: left;">20</span>
+              </div>
+            </div>
+
+            <!-- Third layer -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">third layer</div>
+              <label style="font-size: 14px;">
+                <input type="checkbox" id="w2-useThirdLayerCheckbox"> add layer
+              </label>
+              <div id="w2-hiddenDim3Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <span style="font-size: 14px;">dim:</span>
+                <input type="range" id="w2-hiddenDim3Slider" min="1" max="200" value="15" style="width: 100px;">
+                <span id="w2-hiddenDim3Value" style="font-size: 14px; min-width: 40px; text-align: left;">15</span>
+              </div>
+            </div>
+
+            <!-- Model seed -->
+            <div style="text-align: center;">
+              <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                <input type="number" id="w2-modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Random O row (aligned init only) -->
+          <div id="w2-randomORow" class="inline-row" style="margin-bottom: 1em; display: none;">
+            <label class="inline-field" style="font-size: 14px;">
+              <input type="checkbox" id="w2-randomOCheckbox">
+              Random orthogonal matrices $O$ (otherwise $O = I$)
+            </label>
+          </div>
+
+          <div id="w2-weightCaption" style="font-size: 12px; color: #999;">
+            Weights: $W_{ij}^{(\ell)} \sim \mathcal{N}(0,\, \varepsilon^2/n_{\ell-1})$
+          </div>
+        </div>
+
+        <!-- Function details panel -->
+        <div id="w2-functionDetailsPanel" class="details-panel task-details">
+          <div style="font-size: 15px; color: #666; margin-bottom: 10px;">
+            Ground Truth Matrix $W^\star$
+          </div>
+          <div id="w2-dimInputs" class="inline-row" style="margin-bottom: 12px;"></div>
+          <div style="font-size: 14px; color: #666; margin-bottom: 6px;">
+            Singular Values $\sigma_m$ <span style="font-size: 12px; color: #999;">— Type any value</span>
+          </div>
+          <div id="w2-svEditor" class="sv-editor"></div>
+          <div id="w2-svWarning" class="sv-warning"></div>
+          <div id="w2-basisOptions" class="inline-row" style="margin-top: 14px;"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TRAINING panel -->
+    <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+      <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <span style="font-size: 16px;">$\eta$:</span>
+            <input type="range" id="w2-etaSlider" min="0" max="100" value="50" style="width: 120px;">
+            <span id="w2-etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.6</span>
+          </div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">init scale $\varepsilon$</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <input type="range" id="w2-initScaleSlider" min="0" max="100" value="50" style="width: 120px;">
+            <input type="number" id="w2-initScaleNumber" min="0" step="any" value="0.01" style="width: 80px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px;">
+          </div>
+          <div style="font-size: 11px; color: #999; margin-top: 4px;">slider 0.0001–1; type any value</div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+          <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2N}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+          <div style="font-size: 12px; margin-top: 4px; color: #999;">full-batch ($|B| = N$)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <hr style="border: none; border-top: 2px solid #ccc; margin-bottom: 0.2em;">
+    <div class="section-label">SIMULATION</div>
+
+    <div style="margin-top: 1em; margin-bottom: 1em;">
+      <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+        <button id="w2-startPauseButton" class="sim-button">start</button>
+        <button id="w2-resetButton" class="sim-button">reset</button>
+      </div>
+
+      <div class="plots-container">
+        <div class="plot-wrapper">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="w2-lossChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+        <div class="plot-wrapper">
+          <div class="plot-box">
+            <div class="plot-content">
+              <canvas id="w2-rightChart" class="plot-canvas"></canvas>
+              <div class="y-axis-label y-axis-label-norms">sharpness</div>
+              <div class="x-axis-label">step</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 1em; text-align: center; color: #666; font-size: 14px;">
+        <label>steps/sec:</label>
+        <span id="w2-stepsPerSec" style="font-weight: bold;">—</span>
+      </div>
+    </div>
+
+    <p class="widget-caption">Widget 2: 1–3 hidden layers. Theory prediction always shown (dotted).</p>
+  </div><!-- /tutorial-widget 2 -->
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MORE BLOG CONTENT — placeholder for section between widget 2 and
+       the final full playground widget
+       ═══════════════════════════════════════════════════════════════════════ -->
+
+  <h2>Full Playground</h2>
+  <p>The full playground with all controls goes here…</p>
+
+</div><!-- /container -->
+
+<!-- Load Chart.js once; both widget instances share it via the global. -->
+<script type="module">
+  import { initWidget } from './train_widget.js';
+  initWidget('w1', { showLayers: false, simple: true });
+  initWidget('w2', { showLayers: true,  simple: true });
+</script>
+
+</body>
+</html>

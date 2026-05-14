@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NTK — analytic vs Jacobian test</title>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: { scale: 1.0 },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .widget-box {
+      background-color: #f7f5f0;
+      padding: 1.5em;
+      padding-top: 2em;
+      padding-bottom: 2em;
+      border-radius: 8px;
+      margin-bottom: 1.5em;
+      position: relative;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px 28px;
+      align-items: center;
+      margin-bottom: 1.5em;
+    }
+    .control-field {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 14px; color: #555;
+    }
+    .control-field input[type="number"] {
+      width: 70px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+
+    .target-info {
+      display: flex; gap: 32px; flex-wrap: wrap; align-items: center;
+      margin-bottom: 1.5em;
+      font-size: 14px; color: #555;
+    }
+
+    .matrix-display { display: flex; justify-content: center; }
+
+    .widget-caption {
+      font-size: 13px; color: #888; margin-top: 12px; text-align: center;
+      max-width: 700px; margin-left: auto; margin-right: auto;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <h1 class="page-title" style="margin-bottom: 0.3em;">NTK — analytic vs Jacobian test</h1>
+  <p style="color: #666; margin-top: 0; margin-bottom: 2em;">
+    Standalone comparison page. Picking the same model seed in both widgets
+    should give identical NTK matrices, confirming that the per-output-Jacobian
+    implementation matches the closed-form 2-layer formula.
+  </p>
+
+  <div class="widget-box">
+    <div class="widget-content">
+
+      <p style="color: #555; margin-top: 0; margin-bottom: 1.5em; font-size: 15px;">
+        Widget 1 — NTK computed via per-output Jacobians (the general method,
+        works at any depth).
+      </p>
+
+      <div class="controls-row">
+        <div class="control-field">
+          <label for="w1-model-seed">model seed:</label>
+          <input type="number" id="w1-model-seed" value="0" min="0" step="1">
+        </div>
+        <button id="w1-generate" class="sim-button">generate</button>
+      </div>
+
+      <div class="target-info">
+        <div><span id="w1-W1"></span></div>
+        <div><span id="w1-W2"></span></div>
+      </div>
+
+      <div class="matrix-display">
+        <div id="w1-ntk-matrix"></div>
+      </div>
+
+      <div class="widget-caption">
+        $\Theta(x, x')_{ij}$ via Jacobians.
+      </div>
+
+    </div>
+  </div>
+
+  <div class="widget-box">
+    <div class="widget-content">
+
+      <p style="color: #555; margin-top: 0; margin-bottom: 1.5em; font-size: 15px;">
+        Widget 2 — same NTK but computed via the closed-form 2-layer formula
+        $\Theta(x, x') = \langle x, x' \rangle\, W_2 W_2^\top + \langle W_1 x, W_1 x' \rangle\, I$.
+      </p>
+
+      <div class="controls-row">
+        <div class="control-field">
+          <label for="w2-model-seed">model seed:</label>
+          <input type="number" id="w2-model-seed" value="0" min="0" step="1">
+        </div>
+        <button id="w2-generate" class="sim-button">generate</button>
+      </div>
+
+      <div class="target-info">
+        <div><span id="w2-W1"></span></div>
+        <div><span id="w2-W2"></span></div>
+      </div>
+
+      <div class="matrix-display">
+        <div id="w2-ntk-matrix"></div>
+      </div>
+
+      <div class="widget-caption">
+        $\Theta(x, x')_{ij}$ via the analytic 2-layer formula.
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="analytic-test-app.js"></script>
+
+</body>
+</html>

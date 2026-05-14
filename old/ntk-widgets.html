@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neural Tangent Kernel — Widgets</title>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: { scale: 1.0 },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .widget-box {
+      background-color: #f7f5f0;
+      padding: 1.5em;
+      padding-top: 2em;
+      padding-bottom: 2em;
+      border-radius: 8px;
+      margin-bottom: 1.5em;
+      position: relative;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px 28px;
+      align-items: center;
+      margin-bottom: 1.5em;
+    }
+    .control-field {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 14px; color: #555;
+    }
+    .control-field input[type="number"] {
+      width: 70px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+
+    .target-info {
+      display: flex; gap: 32px; flex-wrap: wrap; align-items: center;
+      margin-bottom: 1.5em;
+      font-size: 14px; color: #555;
+    }
+    .target-info .label { color: #888; margin-right: 8px; font-size: 13px; }
+
+    .matrix-display { display: flex; justify-content: center; }
+
+    .widget-caption {
+      font-size: 13px; color: #888; margin-top: 12px; text-align: center;
+      max-width: 700px; margin-left: auto; margin-right: auto;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="widget-box">
+   <div class="widget-content">
+
+      <p style="color: #555; margin-top: 0; margin-bottom: 1.5em; font-size: 15px;">
+        A visualization of the Neural Tangent Kernel for a random model on the
+        dataset $\{x = (1, 0),\ (0, 1)\}$. Note that the target function $y = Mx$
+        does not affect the NTK, only the residuals (which will evolve according
+        to the NTK).
+      </p>
+
+      <div class="controls-row">
+        <div class="control-field">
+          <label for="w1-model-seed">model seed:</label>
+          <input type="number" id="w1-model-seed" value="0" min="0" step="1">
+        </div>
+        <button id="w1-generate" class="sim-button">generate</button>
+        <button id="w1-toggle-details" class="sim-button" type="button">show weights</button>
+      </div>
+
+      <div id="w1-details" style="display: none; gap: 24px; flex-wrap: wrap; align-items: center; margin-bottom: 1em; font-size: 14px; color: #555;">
+        <span id="w1-sigmas"></span>
+        <span id="w1-W1"></span>
+        <span id="w1-W2"></span>
+      </div>
+
+      <div class="matrix-display">
+        <div id="w1-ntk-matrix"></div>
+      </div>
+
+      <div class="widget-caption">
+        Each cell is $\Theta(x, x')_{ij}$ — the inner product of derivatives
+        of $f$ (with respect to different output dimensions) across all
+        parameters. Cells colored by $\Theta_{ij}$ relative to the matrix max.
+      </div>
+
+    </div>
+  </div>
+
+  <div class="widget-box">
+   <div class="widget-content">
+
+      <p style="color: #555; margin-top: 0; margin-bottom: 1.5em; font-size: 15px;">
+        Time evolution of the NTK on the Saxe analytic trajectory. Specify the
+        target singular values $s_1, s_2$ and a basis seed for $U, V$. The
+        model's singular values evolve from $\sigma_0 = 0.001$ according to
+        $\sigma_i(t) = s_i / \big(1 + (s_i/\sigma_0 - 1) e^{-2 s_i t}\big)$.
+        Scrub $t$ to watch the NTK at successive snapshots — its entries
+        change in magnitude, but the eigenbasis is fixed.
+      </p>
+
+      <!-- Full-width time slider on top. -->
+      <div style="margin-bottom: 1em;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <label for="w3-t-slider" style="font-size: 14px; color: #555; min-width: 30px;">$t$:</label>
+          <input type="range" id="w3-t-slider" min="0" max="1000" value="0" step="1" style="flex: 1;">
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <div class="control-field">
+          <label for="w3-s1">$s_1$:</label>
+          <input type="number" id="w3-s1" value="1.0" step="0.1" min="0">
+        </div>
+        <div class="control-field">
+          <label for="w3-s2">$s_2$:</label>
+          <input type="number" id="w3-s2" value="0.4" step="0.1" min="0">
+        </div>
+        <div class="control-field">
+          <label for="w3-basis-seed">basis seed:</label>
+          <input type="number" id="w3-basis-seed" value="0" min="0" step="1">
+        </div>
+        <button id="w3-toggle-details" class="sim-button" type="button">show weights</button>
+      </div>
+
+      <div id="w3-details" style="display: none; gap: 24px; flex-wrap: wrap; align-items: center; margin-bottom: 1em; font-size: 14px; color: #555;">
+        <span id="w3-sigmas-display"></span>
+        <span id="w3-W1"></span>
+        <span id="w3-W2"></span>
+      </div>
+
+      <!-- Two-column layout: NTK matrix on the LEFT, plots on the right.
+           justify-content: center so the row sits centered in the widget box. -->
+      <div class="panels" style="display: flex; gap: 16px; height: 384px; margin-bottom: 1em; justify-content: center;">
+        <div style="display: flex; align-items: center; justify-content: center;">
+          <div id="w3-ntk-matrix"></div>
+        </div>
+        <div style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px;">
+          <div class="plot2d-wrap" style="position: relative; flex: 1; min-height: 0;">
+            <canvas id="w3-loss-plot" style="display: block; width: 100%; height: 100%;
+                                              border: 1px solid #ccc; border-radius: 4px;
+                                              background: #fff;"></canvas>
+          </div>
+          <div class="plot2d-wrap" style="position: relative; flex: 1; min-height: 0;">
+            <canvas id="w3-sigma-plot" style="display: block; width: 100%; height: 100%;
+                                               border: 1px solid #ccc; border-radius: 4px;
+                                               background: #fff;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="widget-caption">
+        Each cell is $\Theta(x, x')_{ij}$ at the current $t$, computed from the
+        analytic snapshot model via Jacobians. Cells colored by $\Theta_{ij}$
+        relative to the matrix max.
+      </div>
+
+    </div>
+  </div>
+
+  <div class="widget-box">
+    <div class="widget-content">
+
+      <p style="color: #555; margin-top: 0; margin-bottom: 1.5em; font-size: 15px;">
+        Eigenstructure of the NTK along the same Saxe trajectory. We
+        diagonalize $\Theta(t)$ numerically (no closed-form formula) and
+        project the residual $\vec r(t)$ onto each eigenvector. The
+        eigenbasis is fixed in $t$ — only the eigenvalues evolve. As you
+        scrub, watch how each $\lambda_\alpha$ rises while $|\vec r \cdot
+        e_\alpha|$ falls — and notice which residual components stay pinned
+        at zero throughout.
+      </p>
+
+      <!-- Full-width time slider on top, mirroring widget 3. -->
+      <div style="margin-bottom: 1em;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <label for="w4-t-slider" style="font-size: 14px; color: #555; min-width: 30px;">$t$:</label>
+          <input type="range" id="w4-t-slider" min="0" max="1000" value="0" step="1" style="flex: 1;">
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <div class="control-field">
+          <label for="w4-s1">$s_1$:</label>
+          <input type="number" id="w4-s1" value="1.0" step="0.1" min="0">
+        </div>
+        <div class="control-field">
+          <label for="w4-s2">$s_2$:</label>
+          <input type="number" id="w4-s2" value="0.4" step="0.1" min="0">
+        </div>
+        <div class="control-field">
+          <label for="w4-basis-seed">basis seed:</label>
+          <input type="number" id="w4-basis-seed" value="0" min="0" step="1">
+        </div>
+        <button id="w4-toggle-details" class="sim-button" type="button">show weights</button>
+      </div>
+
+      <div id="w4-details" style="display: none; gap: 24px; flex-wrap: wrap; align-items: center; margin-bottom: 1em; font-size: 14px; color: #555;">
+        <span id="w4-sigmas-display"></span>
+        <span id="w4-W1"></span>
+        <span id="w4-W2"></span>
+      </div>
+
+      <!-- Side-by-side bar charts: λ_α on the left, |r·e_α| on the right.
+           Both share the same eigenvector indices on the x-axis, with matching
+           per-bar colors. Hovering one panel highlights the same bar in the
+           other (wired in ntk-app.js). -->
+      <div class="panels" style="display: flex; gap: 16px; height: 300px; margin-bottom: 1em;">
+        <div class="plot2d-wrap" style="position: relative; flex: 1; min-height: 0;">
+          <canvas id="w4-eig-bars" style="display: block; width: 100%; height: 100%;
+                                            border: 1px solid #ccc; border-radius: 4px;
+                                            background: #fff;"></canvas>
+        </div>
+        <div class="plot2d-wrap" style="position: relative; flex: 1; min-height: 0;">
+          <canvas id="w4-resid-bars" style="display: block; width: 100%; height: 100%;
+                                              border: 1px solid #ccc; border-radius: 4px;
+                                              background: #fff;"></canvas>
+        </div>
+      </div>
+
+      <div class="widget-caption">
+        Eigenvectors are sorted by $\lambda_\alpha$ at $t = t_{\max}$ and held
+        fixed thereafter — bar position $\alpha$ refers to the same eigenvector
+        across the entire scrub. Same color across the two panels indicates
+        the same eigenvector; hover any bar to highlight its partner.
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="ntk-app.js"></script>
+
+</body>
+</html>

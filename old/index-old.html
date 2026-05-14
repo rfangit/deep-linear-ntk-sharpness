@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Linear Network — Specified Singular Values</title>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: { scale: 1.0 },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .sv-editor { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-start; }
+    .sv-row { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .sv-row .sv-label { font-size: 13px; color: #666; font-family: serif; font-style: italic; }
+    .sv-row input[type="number"] {
+      width: 90px; font-size: 13px; padding: 4px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .sv-row input[type="number"]:focus { outline: none; border-color: #cc8855; }
+    .sv-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .sv-preset-btn {
+      font-size: 12px; padding: 3px 10px; background: #fff4e8;
+      border: 1px solid #ddc09a; border-radius: 4px; color: #aa7744; cursor: pointer;
+    }
+    .sv-preset-btn:hover { background: #ffe8cc; }
+    .sv-warning { font-size: 12px; color: #aa4444; margin-top: 8px; display: none; }
+    .locked-pill {
+      font-size: 14px; padding: 4px 10px; background: #fff;
+      border: 1px solid #e0c0c0; border-radius: 4px; color: #555;
+    }
+    /* Inline label row used inside the task box (data params, basis options) */
+    .inline-row { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+    .inline-field { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555; }
+    .inline-field input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <h1 class="page-title" style="margin-bottom: 0.3em;">Deep Linear Network — Specified Singular Values</h1>
+  <p style="color: #666; margin-top: 0; margin-bottom: 2em;">
+    Train a deep <em>linear</em> network on linear regression with a target matrix $W^\star$ whose singular values you choose directly.
+  </p>
+
+  <hr style="border: none; border-top: 2px solid #ccc; margin-top: 2em; margin-bottom: 0.2em;">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+    <div class="section-label" style="margin-bottom: 0;">SETUP</div>
+    <button id="resetToDefaultsButton" class="sim-button">reset to defaults</button>
+  </div>
+
+  <div style="margin-top: 0; margin-bottom: 2em;">
+
+    <!-- Row 1: Network (Red) -->
+    <div style="display: flex; gap: 1em; margin-bottom: 1em;">
+      <div style="background-color: #fff0f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; position: relative; min-height: 100px; flex: 1;">
+        <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc5555; white-space: pre;">    NETWORK</div>
+        <div style="display: flex; gap: 2em; margin-left: 60px; flex-wrap: wrap; align-items: flex-start;">
+
+          <!-- Hidden dim 1 -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim 1</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <input type="range" id="hiddenDim1Slider" min="0" max="100" value="50" style="width: 120px;">
+              <span id="hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">30</span>
+            </div>
+          </div>
+
+          <!-- Second layer option -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">second layer</div>
+            <label style="font-size: 14px;">
+              <input type="checkbox" id="useSecondLayerCheckbox">
+              add layer
+            </label>
+            <div id="hiddenDim2Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <span style="font-size: 14px;">dim:</span>
+              <input type="range" id="hiddenDim2Slider" min="0" max="100" value="50" style="width: 100px;">
+              <span id="hiddenDim2Value" style="font-size: 14px; min-width: 40px; text-align: left;">20</span>
+            </div>
+          </div>
+
+          <!-- Model seed -->
+          <div style="text-align: center;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <input type="number" id="modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: center; align-items: center; flex-shrink: 0;">
+        <svg id="networkViz" width="400"></svg>
+      </div>
+    </div>
+
+    <!-- Row 2: Task (Orange) — target matrix + data sampling -->
+    <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+
+      <div style="margin-left: 60px;">
+        <!-- Header row: locked dataset label + formula -->
+        <div style="display: flex; gap: 2em; align-items: flex-start; flex-wrap: wrap; margin-bottom: 1em;">
+          <div>
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">dataset</div>
+            <div class="locked-pill">Linear regression with specified $W^\star$</div>
+          </div>
+          <div id="taskFormulaContainer" style="text-align: left; flex: 1; min-width: 320px;"></div>
+        </div>
+
+        <!-- Data params: nTrain, dataSeed -->
+        <div id="dataParamsContainer" class="inline-row" style="margin-bottom: 0.5em;"></div>
+
+        <!-- Input distribution mode -->
+        <div class="inline-row" style="margin-bottom: 0.5em; gap: 18px;">
+          <span style="font-size: 14px; color: #555;">inputs:</span>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="inputMode" id="inputModeWhitened" value="whitened">
+            whitened (exact $\Sigma_x = I$)
+          </label>
+          <label class="inline-field" style="font-size: 14px;">
+            <input type="radio" name="inputMode" id="inputModeGaussian" value="gaussian">
+            iid Gaussian $\mathcal{N}(0, I)$
+          </label>
+        </div>
+        <div id="inputModeWarning" style="font-size: 12px; color: #aa4444; margin-bottom: 1em; display: none;"></div>
+
+        <!-- Singular value editor -->
+        <div style="border-top: 1px dashed #e0d0c0; padding-top: 12px;">
+          <div style="font-size: 15px; color: #666; margin-bottom: 10px;">
+            ground-truth matrix $W^\star$ <span style="font-size: 12px; color: #999;">(specify dimensions, then singular values)</span>
+          </div>
+
+          <!-- Dimensions: input k, output m. Drives how many σ values appear below. -->
+          <div id="dimInputs" class="inline-row" style="margin-bottom: 12px;"></div>
+
+          <!-- Basis options: random U,V vs M = Σ; basisSeed -->
+          <div id="basisOptions" class="inline-row" style="margin-bottom: 12px;"></div>
+
+          <div style="font-size: 14px; color: #666; margin-bottom: 6px;">
+            singular values $\sigma_1, \sigma_2, \ldots, \sigma_m$ <span style="font-size: 12px; color: #999;">(one per output dimension; type any value)</span>
+          </div>
+          <div id="svEditor" class="sv-editor"></div>
+          <div class="sv-presets">
+            <span style="font-size: 12px; color: #888; align-self: center; margin-right: 4px;">presets:</span>
+            <button class="sv-preset-btn" data-sv-preset="powers-of-2">powers of 2 (1, ½, ¼, …)</button>
+            <button class="sv-preset-btn" data-sv-preset="linear-decay">linear decay</button>
+            <button class="sv-preset-btn" data-sv-preset="all-equal">all equal (= 1)</button>
+            <button class="sv-preset-btn" data-sv-preset="one-large">one large, rest small</button>
+            <span style="font-size: 11px; color: #999; align-self: center; margin-left: 6px;">(values stay editable after applying)</span>
+          </div>
+          <div id="svWarning" class="sv-warning"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3: Training (Blue) -->
+    <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+      <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+      <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <span style="font-size: 16px;">$\eta$:</span>
+            <input type="range" id="etaSlider" min="0" max="100" value="50" style="width: 120px;">
+            <span id="etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.01</span>
+          </div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">init scale $\varepsilon$</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+            <input type="range" id="initScaleSlider" min="0" max="100" value="50" style="width: 120px;">
+            <input type="number" id="initScaleNumber" min="0" step="any" value="0.01" style="width: 80px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px;">
+          </div>
+          <div style="font-size: 11px; color: #999; margin-top: 4px;">slider 0.0001–1; type any value</div>
+        </div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+          <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2N}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+          <div style="font-size: 12px; margin-top: 4px; color: #999;">full-batch ($|B| = N$)</div>
+        </div>
+      </div>
+      <div style="margin-left: 60px; margin-top: 12px; font-size: 12px; color: #999;">
+        weight init: $W_{ij}^{(\ell)} \sim \mathcal{N}(0,\, \varepsilon^2/n_{\ell-1})$
+      </div>
+    </div>
+  </div>
+
+  <hr style="border: none; border-top: 2px solid #ccc; margin-top: 2em; margin-bottom: 0.2em;">
+
+  <div class="section-label">SIMULATION</div>
+
+  <div style="margin-top: 1em; margin-bottom: 2em;">
+    <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+      <button id="startPauseButton" class="sim-button">start</button>
+      <button id="resetButton" class="sim-button">reset</button>
+    </div>
+
+    <div class="plots-container">
+      <div class="plot-wrapper">
+        <div class="plot-box">
+          <div class="plot-content">
+            <canvas id="lossChart" class="plot-canvas"></canvas>
+            <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+            <div class="x-axis-label">step</div>
+          </div>
+        </div>
+      </div>
+      <div class="plot-wrapper">
+        <div class="plot-box">
+          <div class="plot-content">
+            <canvas id="rightChart" class="plot-canvas"></canvas>
+            <div class="y-axis-label y-axis-label-norms">sharpness</div>
+            <div class="x-axis-label">step</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="logscale-control">
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="logScaleXCheckbox">
+        logscale x-axes
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="logScaleCheckbox">
+        logscale y-axes
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="clipSharpnessCheckbox" checked>
+        clip sharpness (3× threshold)
+      </label>
+      <label style="margin-right: 20px;">
+        <input type="checkbox" id="showPredictionCheckbox" checked>
+        show theory prediction
+      </label>
+      <span style="margin-right: 0.5em;">plot w.r.t.</span>
+      <span class="plot-xaxis-toggle">
+        <a href="#" id="step-link" class="active">step</a><a href="#" id="teff-link">$\eta \cdot \mathrm{step}$</a>
+      </span>
+      <span style="margin-left: 30px; display: inline-flex; align-items: center; gap: 8px;">
+        <span>EMA:</span>
+        <input type="range" id="emaSlider" min="0" max="100" value="0" style="width: 120px;">
+        <span id="emaValue" style="min-width: 30px; text-align: left;">off</span>
+      </span>
+    </div>
+
+    <div style="margin-top: 1.5em; text-align: center; color: #666; font-size: 14px;">
+      <label>steps/sec:</label>
+      <span id="stepsPerSec" style="font-weight: bold;">—</span>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+<script type="module" src="app.js"></script>
+
+</body>
+</html>
