@@ -104,6 +104,11 @@ export function initWidget(prefix = '', options = {}) {
     if (options.defaultAlignedInit !== undefined) {
       appState.alignedInit = !!options.defaultAlignedInit;
     }
+    // defaultHiddenDim1: first-load hidden width (clamped to the slider range
+    // [1, 200]). Defers to AppState's own default (30) if omitted.
+    if (options.defaultHiddenDim1 !== undefined) {
+      appState.hiddenDim1 = Math.max(1, Math.min(200, Math.round(options.defaultHiddenDim1)));
+    }
     // defaultDepth: 1, 2, or 3 hidden layers on first load (no persisted state).
     // Defers to AppState's own defaults if omitted.
     if (options.defaultDepth === 1) { appState.useSecondLayer = false; appState.useThirdLayer = false; }
