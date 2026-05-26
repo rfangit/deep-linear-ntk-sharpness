@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Linear Networks: Hessian Residual Term</title>
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: { scale: 1.0 },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          window.mathJaxReady = true;
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Shared training-widget styles (copied from index.html) ── */
+    .sv-editor { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+    .sv-row { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+    .sv-row .sv-label { font-size: 14px; color: #555; font-family: serif; font-style: italic; }
+    .sv-row input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .sv-row input[type="number"]:focus { outline: none; border-color: #cc8855; }
+    .inline-row { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+    .inline-field { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555; }
+    .inline-field input[type="number"] {
+      width: 80px; font-size: 13px; padding: 3px 6px; text-align: center;
+      border: 1px solid #ccc; border-radius: 3px;
+    }
+    .details-panel { display: none; margin-top: 1em; padding-top: 1em; border-top: 1px dashed #d8c0c0; }
+    .details-panel.task-details { border-top-color: #e0d0c0; }
+    .sv-warning { font-size: 12px; color: #aa4444; margin-top: 8px; display: none; }
+
+    /* Residual-overlay control box, styled like the other panels */
+    .overlay-panel {
+      background-color: #f4f0ff;
+      padding: 1em 1.5em;
+      border-radius: 8px;
+      margin-bottom: 1em;
+      position: relative;
+      min-height: 50px;
+      border: 1px solid #d8d0e8;
+    }
+    .overlay-panel .overlay-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #6a4ec2;
+      margin-bottom: 0.5em;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <h1 class="page-title" style="margin-bottom: 0.3em;">Deep Linear Networks: Hessian Residual Term</h1>
+
+  <div class="tutorial-content">
+
+    <p>The Hessian of the mean-squared-error loss for a deep linear network decomposes as
+    $H = H_{\text{GN}} + R$, where $H_{\text{GN}} = J^\top J$ is the Gauss–Newton term and $R$ is a residual term that vanishes at the optimum (where $f(x_a) - y_a = 0$). The widget on the main page predicts the sharpness purely from $H_{\text{GN}}$, whose nonzero eigenvalues are $s_i(t) + s_k(t)$. Away from the optimum the residual reshapes the spectrum — and, crucially, lifts a large block of GN-null directions off zero, producing eigenvalues (including negative ones) that $H_{\text{GN}}$ cannot see.</p>
+
+    <p>For a 2-layer linear network of input dim $d$, hidden width $m$, and output dim $n$, learning a rank-$r$ target, the full-Hessian eigenvalues split into the following classes. We write $s_i = s_i(t)$ for the current singular value and $s_i^0$ for its target.</p>
+
+    <ul style="margin-left: 1.5em;">
+      <li><strong>Aligned</strong> ($i = k \le r$): GN eigenvalue $2 s_i$, full eigenvalue $3 s_i - s_i^0$. Count $r$. These carry the residual error and hold the largest eigenvalues.</li>
+      <li><strong>Aligned (null)</strong>: the GN-null partner of each aligned mode, full eigenvalue $s_i^0 - s_i$. Count $r$. At initialization this sits near $+s_i^0$ — a source of the high early sharpness.</li>
+      <li><strong>Cross</strong> ($i \ne k$, both $\le r$): for each unordered pair $\{i,k\}$ the full Hessian mixes a 4-dimensional subspace $\{h_{ik}, h_{ki}, g_{ik}, g_{ki}\}$ into two $2\times2$ blocks, giving the four roots
+      $$\lambda_{1,2} = \tfrac12\!\left[\,2(s_i+s_k) - (s_i^0+s_k^0) \pm \sqrt{4 s_i s_k + (s_i^0-s_k^0)^2}\,\right],$$
+      $$\lambda_{3,4} = \tfrac12\!\left[\,(s_i^0+s_k^0) \pm \sqrt{\bigl(2(s_i-s_k)-(s_i^0-s_k^0)\bigr)^2 + 4 s_i s_k}\,\right].$$
+      </li>
+      <li><strong>Single-value</strong> (one of $i,k > r$): full eigenvalue equals the lone singular value $s_i$ (or $s_k$) — the residual acts trivially here, so this matches GN exactly. Count $r(n-r) + r(d-r)$.</li>
+      <li><strong>Hidden null (±)</strong>: when the hidden layer is overparameterized ($m > r$), the residual lifts the non-idle GN-null subspace into pairs $\pm(s_i - s_i^0)$, each branch with multiplicity $(m-r)$, for a total count $2r(m-r)$. The GN eigenvalue is $0$ for all of these, so they are invisible to the Gauss–Newton prediction, yet at initialization they sit near $\pm s_i^0$ and dominate the early sharpness. This class is the main correction the residual adds.</li>
+      <li><strong>Hidden null (0)</strong>: the remaining surplus hidden units pair with idle (zero-singular-value) input/output directions and stay at exactly $0$ for all $t$. Count $(m-r)(n+d-2r)$. These carry no dynamics, but they complete the spectrum — the six classes together account for all $P = m(n+d)$ parameters — so the overlay can plot them as a flat zero line for direct comparison against a full numerical diagonalization.</li>
+    </ul>
+
+    <p>Turn on <em>full Hessian</em> below to overlay the refined prediction (dash-dot), and switch to <em>top-k per class</em> to display each class independently — including the two hidden-null families as separate curves. At convergence the residual vanishes and the full prediction collapses back onto the Gauss–Newton curves; during training they differ in informative ways — most visibly the high initial sharpness carried by the aligned-null and hidden-null modes.</p>
+
+    <!-- ==================== The Training Widget ==================== -->
+
+    <div class="tutorial-widget">
+
+      <!-- TASK panel -->
+      <div style="background-color: #fff8f0; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+        <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #cc8855; white-space: pre;">    TASK</div>
+
+        <div style="margin-left: 60px;">
+
+          <!-- Input mode -->
+          <div class="inline-row" style="margin-bottom: 0.7em; gap: 18px;">
+            <span style="font-size: 14px; color: #555;">Inputs:</span>
+            <label class="inline-field" style="font-size: 14px;">
+              <input type="radio" name="tw-inputMode" id="tw-inputModeWhitened" value="whitened">
+              Whitened (exact $\Sigma_x = I$)
+            </label>
+            <label class="inline-field" style="font-size: 14px;">
+              <input type="radio" name="tw-inputMode" id="tw-inputModeGaussian" value="gaussian">
+              iid Gaussian $\mathcal{N}(0, I)$
+            </label>
+          </div>
+          <div id="tw-inputModeWarning" style="font-size: 12px; color: #aa4444; margin-bottom: 0.7em; display: none;"></div>
+
+          <!-- Data params -->
+          <div id="tw-dataParamsContainer" class="inline-row" style="margin-bottom: 1em;"></div>
+
+          <!-- Init mode -->
+          <div class="inline-row" style="margin-bottom: 1em; gap: 18px;">
+            <span style="font-size: 14px; color: #555;">Initialization:</span>
+            <label class="inline-field" style="font-size: 14px;">
+              <input type="radio" name="tw-initMode" id="tw-initModeRandom" value="random">
+              Random Gaussian
+            </label>
+            <label class="inline-field" style="font-size: 14px;">
+              <input type="radio" name="tw-initMode" id="tw-initModeAligned" value="aligned">
+              Aligned to SVD basis
+            </label>
+          </div>
+
+          <!-- Collapsible toggle buttons -->
+          <div style="display: flex; gap: 0.6em; flex-wrap: wrap; margin-bottom: 0.2em;">
+            <button id="tw-toggleModelDetailsButton" class="sim-button" type="button">show model details</button>
+            <button id="tw-toggleFunctionDetailsButton" class="sim-button" type="button">show function details</button>
+          </div>
+
+          <!-- Model details panel -->
+          <div id="tw-modelDetailsPanel" class="details-panel task-details">
+            <div style="display: flex; gap: 2em; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1.2em;">
+
+              <!-- Hidden dim 1 -->
+              <div style="text-align: center;">
+                <div style="font-size: 15px; margin-bottom: 4px; color: #666;">hidden dim 1</div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                  <input type="range" id="tw-hiddenDim1Slider" min="1" max="200" value="30" style="width: 120px;">
+                  <span id="tw-hiddenDim1Value" style="font-size: 15px; min-width: 40px; text-align: left;">30</span>
+                </div>
+              </div>
+
+              <!-- Second layer -->
+              <div style="text-align: center;">
+                <div style="font-size: 15px; margin-bottom: 4px; color: #666;">second layer</div>
+                <label style="font-size: 14px;">
+                  <input type="checkbox" id="tw-useSecondLayerCheckbox"> add layer
+                </label>
+                <div id="tw-hiddenDim2Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                  <span style="font-size: 14px;">dim:</span>
+                  <input type="range" id="tw-hiddenDim2Slider" min="1" max="200" value="20" style="width: 100px;">
+                  <span id="tw-hiddenDim2Value" style="font-size: 14px; min-width: 40px; text-align: left;">20</span>
+                </div>
+              </div>
+
+              <!-- Third layer -->
+              <div style="text-align: center;">
+                <div style="font-size: 15px; margin-bottom: 4px; color: #666;">third layer</div>
+                <label style="font-size: 14px;">
+                  <input type="checkbox" id="tw-useThirdLayerCheckbox"> add layer
+                </label>
+                <div id="tw-hiddenDim3Row" style="display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                  <span style="font-size: 14px;">dim:</span>
+                  <input type="range" id="tw-hiddenDim3Slider" min="1" max="200" value="15" style="width: 100px;">
+                  <span id="tw-hiddenDim3Value" style="font-size: 14px; min-width: 40px; text-align: left;">15</span>
+                </div>
+              </div>
+
+              <!-- Model seed -->
+              <div style="text-align: center;">
+                <div style="font-size: 15px; margin-bottom: 4px; color: #666;">model seed</div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+                  <input type="number" id="tw-modelSeedInput" value="0" min="0" step="1" style="width: 60px; font-size: 14px; padding: 2px 6px; text-align: center;">
+                </div>
+              </div>
+            </div>
+
+            <!-- Random O row (aligned init only) -->
+            <div id="tw-randomORow" class="inline-row" style="margin-bottom: 1em; display: none;">
+              <label class="inline-field" style="font-size: 14px;">
+                <input type="checkbox" id="tw-randomOCheckbox">
+                Random orthogonal matrices $O$ (otherwise $O = I$)
+              </label>
+            </div>
+
+            <div id="tw-weightCaption" style="font-size: 12px; color: #999;">
+              Weights: $W_{ij}^{(\ell)} \sim \mathcal{N}(0,\, \varepsilon^2/n_{\ell-1})$
+            </div>
+          </div>
+
+          <!-- Function details panel -->
+          <div id="tw-functionDetailsPanel" class="details-panel task-details">
+            <div style="font-size: 15px; color: #666; margin-bottom: 10px;">
+              Ground Truth Matrix $W^\star$
+            </div>
+            <div id="tw-dimInputs" class="inline-row" style="margin-bottom: 12px;"></div>
+            <div style="font-size: 14px; color: #666; margin-bottom: 6px;">
+              Singular Values $\sigma_m$ <span style="font-size: 12px; color: #999;">— Type any value</span>
+            </div>
+            <div id="tw-svEditor" class="sv-editor"></div>
+            <div id="tw-svWarning" class="sv-warning"></div>
+            <div id="tw-basisOptions" class="inline-row" style="margin-top: 14px;"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- TRAINING panel -->
+      <div style="background-color: #f0f4ff; padding: 1.5em; padding-top: 2em; padding-bottom: 2em; border-radius: 8px; margin-bottom: 1em; position: relative; min-height: 80px;">
+        <div style="position: absolute; left: 20px; top: 50%; transform: rotate(-90deg) translateX(-50%); transform-origin: left center; font-size: 14px; font-weight: 600; color: #5578cc; white-space: pre;">    TRAINING</div>
+        <div style="display: flex; gap: 2em; margin-left: 60px; align-items: flex-start;">
+          <div style="text-align: center; flex: 1;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">learning rate</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <span style="font-size: 16px;">$\eta$:</span>
+              <input type="range" id="tw-etaSlider" min="0" max="100" value="50" style="width: 120px;">
+              <span id="tw-etaValue" style="font-size: 15px; min-width: 60px; text-align: left;">0.6</span>
+            </div>
+          </div>
+          <div style="text-align: center; flex: 1;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">init scale $\varepsilon$</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;">
+              <input type="range" id="tw-initScaleSlider" min="0" max="100" value="50" style="width: 120px;">
+              <input type="number" id="tw-initScaleNumber" min="0" step="any" value="0.01" style="width: 80px; font-size: 13px; padding: 3px 6px; text-align: center; border: 1px solid #ccc; border-radius: 3px;">
+            </div>
+            <div style="font-size: 11px; color: #999; margin-top: 4px;">slider 0.0001–1; type any value</div>
+          </div>
+          <div style="text-align: center; flex: 1;">
+            <div style="font-size: 15px; margin-bottom: 4px; color: #666;">loss function</div>
+            <div style="margin-top: 6px;">$$\mathcal{L} = \frac{1}{2N}\sum_{i=1}^{N}\left\|\hat{f}(\mathbf{x}_i) - \mathbf{y}_i\right\|^2$$</div>
+            <div style="font-size: 12px; margin-top: 4px; color: #999;">full-batch ($|B| = N$)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OVERLAY panel: host for the theory-overlay control panel. train_widget.js
+           renders the controls (which theory, strategy, per-class top-k) into
+           #tw-theoryControlContainer when the widget is created with
+           showTheoryControls: true. -->
+      <div class="overlay-panel">
+        <div class="overlay-title">SHARPNESS OVERLAY</div>
+        <div id="tw-theoryControlContainer"></div>
+      </div>
+
+      <!-- RUN PARAMETERS panel: live displayed-eigenvalue count + the fixed
+           (pre-run) Lanczos tracked-count and iteration controls. Rendered by
+           train_widget.js into #tw-runControlContainer when the widget is
+           created with showRunControls: true. -->
+      <div class="overlay-panel">
+        <div class="overlay-title">RUN PARAMETERS</div>
+        <div id="tw-runControlContainer"></div>
+      </div>
+
+      <!-- SIMULATION -->
+      <hr style="border: none; border-top: 2px solid #ccc; margin-bottom: 0.2em;">
+      <div class="section-label">SIMULATION</div>
+
+      <div style="margin-top: 1em; margin-bottom: 1em;">
+        <div style="display: flex; gap: 1em; align-items: center; margin-bottom: 2em;">
+          <button id="tw-startPauseButton" class="sim-button">start</button>
+          <button id="tw-resetButton" class="sim-button">reset</button>
+        </div>
+
+        <div class="plots-container">
+          <div class="plot-wrapper">
+            <div class="plot-box">
+              <div class="plot-content">
+                <canvas id="tw-lossChart" class="plot-canvas"></canvas>
+                <div class="y-axis-label y-axis-label-loss">loss $\mathcal{L}$</div>
+                <div class="x-axis-label">step</div>
+              </div>
+            </div>
+          </div>
+          <div class="plot-wrapper">
+            <div class="plot-box">
+              <div class="plot-content">
+                <canvas id="tw-rightChart" class="plot-canvas"></canvas>
+                <div class="y-axis-label y-axis-label-norms">sharpness</div>
+                <div class="x-axis-label">step</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1em; text-align: center; color: #666; font-size: 14px;">
+          <label>steps/sec:</label>
+          <span id="tw-stepsPerSec" style="font-weight: bold;">—</span>
+        </div>
+      </div>
+
+      <p class="widget-caption">Train a deep linear network and compare measured top Hessian eigenvalues against analytic theory. Use the overlay controls to choose the Gauss-Newton ($H_{\text{GN}}$, dotted) and/or full-Hessian ($H_{\text{GN}} + R$, dash-dot) theory, and to show either the top-$k$ eigenvalues overall or the top-$k$ within each eigenvalue class (aligned, aligned-null, cross, single-value). The theory is derived for the 2-layer case ($L = 2$, single hidden layer) with aligned init.</p>
+    </div><!-- /training widget -->
+
+  </div><!-- end .tutorial-content -->
+
+</div><!-- end .container -->
+
+<!-- Training widget. Multi-layer UI but with tw1's defaults (single hidden
+     layer, smaller η and ε, aligned init), plus the residual-prediction
+     option enabled. -->
+<script type="module">
+  import { initWidget } from './train_widget.js';
+  initWidget('tw', {
+    showLayers: true,
+    simple: true,
+    defaultDepth: 1,
+    defaultEta: 0.05,
+    defaultInitScale: 0.0005,
+    defaultAlignedInit: true,
+    // Expose the full theory-overlay control panel.
+    showTheoryControls: true,
+    // Expose the run-parameter panel (live display count + fixed Lanczos params).
+    showRunControls: true,
+    // Initial overlay: GN + full Hessian, top-k overall, k=3 (matches the prior
+    // top-3 default). The user can switch to per-class top-k and dial each class
+    // independently. Pool size raised to comfortably fit dense per-class views.
+    predictionConfig: {
+      theories: ['gn', 'full'],
+      strategy: 'pooled',
+      k: 3,
+      perClassK: { aligned: 3, aligned_null: 3, cross: 3, single_value: 3, hidden_null: 3, idle_null: 3 },
+      show: true
+    },
+    maxPredDatasets: 64,
+    kEigs: 3,
+  });
+</script>
+
+</body>
+</html>

@@ -72,6 +72,8 @@
       <li>Model weights can be decomposed in the SVD basis as $W_1 = O \Sigma^{1/2} V^\top,\ W_2 = U \Sigma^{1/2} O^\top$, where the singular values of $W_1, W_2$ are identical and $O$ is an arbitrary orthogonal matrix such that $O^\top O = I$, which means it does not affect our function.</li>
     </ul>
 
+    <p>Additionally, we assume that the rank of the true function $r$ is less than or equal to the hidden dimension $m$, so our model has enough expressivity to solve our problem.</p>
+
     <p>Their analysis showed the singular values $\Sigma(t)$ of our model $f(x) = U \Sigma(t) V^\top x$ evolve as</p>
 
     $$\frac{d\sigma}{dt} \;=\; 2\,\sigma\,(s - \sigma),$$
@@ -82,7 +84,7 @@
 
     <p>This results in a staircase-like loss curve: each mode stays near its small initial value for a long time, then rapidly transitions to its target value $s$. The transition time scales as $1/s$ and thus deep linear networks preferentially learn the largest singular values of our data, with learning happening abruptly.</p>
 
-    <p>This result extends to a model with $L$ layers $f = W_L W_{L-1} \cdots W_2 W_1$, yielding</p>
+    <p>This result extends to a model with $L$ layers $f = W_L W_{L-1} \cdots W_2 W_1$ (where again, no layers are too small to express the true function), yielding</p>
 
     $$\frac{d\sigma}{dt} \;=\; L \sigma^{2 - 2/L}(s - \sigma)$$
 
@@ -163,7 +165,7 @@
     $$U \Sigma U^\top \;=\; \sum_i s_i(t) \, u_i u_i^\top, \qquad V \Sigma V^\top \;=\; \sum_i s_i(t) \, v_i v_i^\top,$$
     $$\implies \Theta(x, x') \;=\; \sum_i s_i(t) \left[\, \langle x, x' \rangle \, u_i u_i^\top \;+\; (v_i^\top x)(v_i^\top x') \, I_n \,\right] \;=\; \sum_i s_i(t) \, K_i(x, x').$$
 
-    <p>The NTK is thus a sum of time-independent kernels $K_i$, each weighted by a singular value $s_i(t)$ that follows the staircase dynamics from the previous section.</p>
+    <p>Here $i$ ranges over the $r$ nonzero singular modes of $M$. We'll account for the zero singular value directions later. The NTK is thus a sum of time-independent kernels $K_i$, each weighted by a singular value $s_i(t)$ that follows the staircase dynamics from the previous section.</p>
 
     <p>We visualize the NTK and its time-evolution along the analytic trajectory below. Slide $t$ to watch the NTK at successive snapshots — its entries change in magnitude, but the eigenbasis is fixed.</p>
 
@@ -339,8 +341,8 @@
     <p>Up until now, we have focused on a small subset of NTK eigenvectors. For a matrix $M$ with $r$ nonzero singular values, there will be $r$ associated eigenvectors $u_i, v_k$. This gives at most $r^2$ eigenvectors $\mathbf{p}_k \otimes u_i$, but our NTK is a matrix with $Nn$ eigenvectors (note $n \geq r$). There are two parts to the resolution of this paradox:</p>
 
     <ul style="margin-left: 1.5em;">
-      <li>If $r < n$, then there are still $n$ eigenvectors $u_i, v_k$, just with 0 eigenvalues.</li>
-      <li>We focused on the $\mathbf{p}_k$ eigenvectors given by dot products between our inputs and $v_k$. However, there are $N - r$ additional $\mathbf{p}_k$ eigenvectors that lie in the common null space of our data side matrices $G, H_1, H_2, \ldots$, and any eigenvector formed with these has eigenvalue 0.</li>
+      <li> Going back to the SVD, $U \in \mathbb{R}^{n \times n}, V \in \mathbb{R}^{d \times d}$ are matrices consisting of $n$ and $d$ vectors respectively. Even if only $r$ correspond to nonzero singular values, these vectors still exist. This gives us a total of $nd$ eigenvectors. </li>
+      <li>We focused on the $\mathbf{p}_k$ eigenvectors given by dot products between our inputs and $v_k$. However, there are $N - d$ additional $\mathbf{p}_k$ eigenvectors that lie in the common null space of our data side matrices $G, H_1, H_2, \ldots$, and any eigenvector formed with these has eigenvalue 0.</li>
     </ul>
 
     <p>To understand the latter, consider $N$ input vectors $(x_1, x_2), (x_1, x_2), ... (x_1, x_2)$. Although this technically comprises $N$ inputs, there are a limited number of resulting vectors you can obtain by projecting the inputs onto a set of vectors, since they all yield the same value. </p>
@@ -352,13 +354,13 @@
     <ul style="margin-left: 1.5em;">
       <li><strong>Aligned modes</strong> ($k = i \leq r$): eigenvalue $2s_i(t)$. There are $r$ of these, one per nonzero singular value of $M$. As shown above, these are the only modes that carry residual error during training.</li>
       <li><strong>Cross modes</strong> ($k \neq i$, both $\leq r$): eigenvalue $s_k(t) + s_i(t)$. There are $r(r-1)$ of these. Whitened inputs force their residual to zero, so although they have nonzero eigenvalues, they sit idle during training.</li>
-      <li><strong>Low-rank $M$ modes</strong>: if $M$ has rank $r < n$, there are $(n-r)r$ eigenvectors with eigenvalue $s_k(t)$ — half the value of the corresponding aligned mode.</li>
-      <li><strong>Extra data modes</strong>: for all the $\mathbf{p}_k$ directions in the null space of the data side matrices, eigenvalue 0. There are $(N-r)n$ of these.</li>
+      <li><strong>Low-rank $M$ modes</strong>: In cases where $n, d > r$, we have additional singular vectors from the SVD matrices $U, V$. Specifically, we have $n$ vectors from $U$, and $d$ vectors from $V$, but these vectors do not necessarily have nonzero singular values. In fact, only $nr + dr - r^2$ pairs will have non zero eigenvalues (which are formed by the sums of pairs of singular values). Subtracting pairs from the previously mentioned modes implies there are $r (d + n - 2r)$ additional low rank modes with nonzero eigenvalues, and the total number of low rank modes (excluding the previous aligned and cross modes) is $nd - r^2$. </li>
+      <li><strong>Extra data modes</strong>: for all the $\mathbf{p}_k$ directions in the null space of the data side matrices, eigenvalue 0. There are $(N-d)n$ of these.</li>
     </ul>
 
     <p>The counts add up:</p>
 
-    $$\underbrace{r}_{\text{aligned}} + \underbrace{r(r-1)}_{\text{cross}} + \underbrace{(n - r) r}_{\text{low-rank}} + \underbrace{(N - r) n}_{\text{extra data}} \;=\; Nn.$$
+    $$\underbrace{r}_{\text{aligned}} + \underbrace{r(r-1)}_{\text{cross}} + \underbrace{nd - r^2}_{\text{low-rank}} + \underbrace{(N - d) n}_{\text{extra data}} \;=\; Nn.$$
 
     <!-- ==================== SECTION: NTK-Hessian ==================== -->
 
@@ -910,9 +912,9 @@
 
   <!-- ==================== SECTION: On 2 Layer Residuals ==================== -->
 
-  <h2>2 Layer Residuals</h2>
+  <h2>What About Residuals?</h2>
 
-  In the case of 2 layers, we can analytically describe the entire sharpness curves over time.
+  To understand the effect of residuals, see this part 2.
 
   </div><!-- end .tutorial-content -->
 
@@ -930,6 +932,7 @@
     defaultEta: 0.05,
     defaultInitScale: 0.0005,
     defaultAlignedInit: true,
+    displayEigs: 3,   // measured eigenvalue curves shown (and in the legend) at init
   });
   // Multi-layer training widget — depth slider visible; default to 2 hidden layers.
   initWidget('tw2', {
@@ -939,6 +942,7 @@
     defaultEta: 0.25,
     defaultInitScale: 0.02,
     defaultAlignedInit: true,
+    displayEigs: 3,   // measured eigenvalue curves shown (and in the legend) at init
   });
 </script>
 

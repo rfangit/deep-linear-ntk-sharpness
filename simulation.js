@@ -12,29 +12,53 @@
 //
 // In addition to the measured Lanczos eigenvalues, each step also advances
 // the Saxe-analytic ODE (see theory.js) and stores the predicted GN-Hessian
-// eigenvalues, so the chart can overlay theory vs. measurement.
+// eigenvalues, so the chart can overlay theory vs. measurement. A parallel
+// residual-corrected (H_GN + R) predictor is advanced in lock-step and its
+// history is exposed too; downstream consumers decide whether to display it.
 
 import { MLP } from './model.js';
 import { Trainer } from './training.js';
 import { generateInputs } from './inputs.js';
 import { generateLinearData } from './data-generator.js';
 import { lanczosTopEigenvalues } from './hessian.js';
-import { SaxePredictor } from './theory.js';
+import { denseTopEigenvalues } from './dense-hessian.js';
+// New σ-only theory architecture: the simulation stores only the analytic
+// singular-value trajectory σ(t), evolved from the Saxe ODE (decoupled from the
+// trained weights, exactly as before). Eigenvalues are NOT computed or stored
+// here — the visualization layer derives them at plot time from sigmaHistory
+// via theory_GN / theory_Hessian_full. predictedLoss is still computed per step
+// (the loss overlay is unchanged).
+import { stepSaxeODE, initialSingularValues, predictedLoss } from './theory.js';
 
 export class Simulation {
   constructor(options = {}) {
     this.isRunning = false;
     this.iteration = 0;
     this.lossHistory = [];          // { iteration, loss }
-    this.eigenvalueHistory = [];    // { iteration, eigs: number[] }
-    this.predictedEigenvalueHistory = []; // { iteration, eigs: number[] } (Saxe theory)
+    this.eigenvalueHistory = [];    // { iteration, eigs: number[] }  (MEASURED, Lanczos)
+    // Exact full-Hessian eigenvalues via dense diagonalization (OPT-IN, small
+    // models only). Each entry { iteration, eigs: number[] } where eigs is the
+    // top-k eigenvalues ascending (same shape as eigenvalueHistory) so the
+    // visualization layer can overlay the two directly. Empty unless exactDiag
+    // was enabled at run start AND P is within the size cap.
+    this.exactEigenvalueHistory = [];
+    // Analytic singular-value trajectory σ(t), the ONLY stored theory state.
+    // Each entry: { iteration, sigmas: number[] } (length r = min(n,d)). The
+    // visualization layer recomputes grouped eigenvalues from this at plot time
+    // via theory_GN / theory_Hessian_full.
+    this.sigmaHistory = [];
     this.predictedLossHistory = [];       // { iteration, loss: number }   (Saxe theory)
     this.params = null;
     this.model = null;
     this.trainer = null;
     this.dataset = null;
     this.dataYArrays = null;        // cached array-wrapped train targets (for Hessian)
-    this.predictor = null;          // SaxePredictor (theory.js) — null until initialize()
+    // Analytic σ vector (instance state, advanced one RK step per training step
+    // via stepSaxeODE). Seeded in initialize(); null until then. Decoupled from
+    // the trained weights — it's a parallel theoretical projection, not measured.
+    this.sigmas = null;
+    this.sigmaStar = null;          // target singular values (for theory + loss)
+    this.theoryL = null;            // L used for the σ ODE (= weight-matrix count)
     this.animationFrameId = null;
 
     // Optional: DOM id for steps/sec display (null = skip display)
@@ -75,6 +99,14 @@ export class Simulation {
       tolRatio: 1e-4
     };
 
+    // Exact dense-diagonalization option (set per-run via captureParams). When
+    // enabled, the full P×P Hessian is built and fully diagonalized each step
+    // alongside Lanczos, for ground-truth comparison. O(P²) grad evals + O(P³)
+    // diag per step, so it is gated to small models by exactDiagMaxP.
+    this.exactDiag = false;
+    this.exactDiagMaxP = options.exactDiagMaxP || 400;
+    this.exactDiagEpsilon = options.exactDiagEpsilon || 1e-5;
+
     // ---- Auto-stop on convergence ----
     //
     // Tracks the running minimum loss. Each time a new minimum is found, the
@@ -85,7 +117,7 @@ export class Simulation {
     // Set minLossPatienceSteps to 0 (or negative) to disable.
     this.convergenceLossThreshold = options.convergenceLossThreshold !== undefined
       ? options.convergenceLossThreshold
-      : 0.01;   // kept for the onAutoStop message in train_widget.js
+      : 0.001;  // 0.1x the previous 0.01 — train further before auto-stopping
     this.convergenceCooldownSteps = options.convergenceCooldownSteps !== undefined
       ? options.convergenceCooldownSteps
       : 200;    // kept for the onAutoStop message in train_widget.js
@@ -145,6 +177,12 @@ export class Simulation {
    *                                   the Saxe theory prediction. Pad with
    *                                   zeros for modes above rank(M). If
    *                                   omitted, the prediction is disabled.
+   * @param {number}    [p.hiddenWidth] First hidden-layer width, used as the
+   *                                   aligned-mode multiplicity m in the
+   *                                   residual-corrected predictor. If
+   *                                   omitted the residual predictor is
+   *                                   disabled (but the GN-only one still
+   *                                   runs).
    */
   captureParams(p) {
     if (!Array.isArray(p.M) || p.M.length === 0 || !Array.isArray(p.M[0])) {
@@ -165,6 +203,11 @@ export class Simulation {
       // (see matrix.js buildMComponentsFromSpec); we don't re-SVD M here.
       sigmaStar: Array.isArray(p.sigmaStar) ? p.sigmaStar.slice() : null,
 
+      // Hidden width for the residual-corrected predictor's aligned-mode
+      // multiplicity. If null, the residual predictor stays disabled.
+      hiddenWidth: (typeof p.hiddenWidth === 'number' && p.hiddenWidth > 0)
+        ? p.hiddenWidth : null,
+
       // Aligned-init parameters. When alignedInit is true the model is built
       // in the target's SVD basis (see model.js _alignedInit). U and V are
       // the target's bases — pass them via buildMComponentsFromSpec at the
@@ -175,9 +218,13 @@ export class Simulation {
       U:           p.U !== undefined ? p.U : null,
       V:           p.V !== undefined ? p.V : null
     };
+    // Exact dense-diagonalization is a fixed (pre-run) choice. Gate to small P
+    // happens in initialize() once the model exists.
+    this.exactDiag = p.exactDiag === true;
     this.model = null;
     this.trainer = null;
-    this.predictor = null;
+    this.sigmas = null;
+    this.sigmaStar = null;
   }
 
   initialize() {
@@ -209,51 +256,66 @@ export class Simulation {
     this.model = new MLP(layerSizes, p.modelSeed, p.initScale, alignedOpts);
     this.trainer = new Trainer(this.model, p.eta, this.dataset);
 
-    // Build the Saxe theory predictor (if σ⋆ is available). L counts only
-    // the *weight matrices* (= layerSizes.length - 1), which is the same L
-    // that appears in f(x) = W_L · … · W_1 · x in the writeup.
+    // Gate exact diagonalization to small models. If requested but P is over the
+    // cap, disable it (the run still proceeds with Lanczos only) and warn.
+    this.exactDiagActive = false;
+    if (this.exactDiag) {
+      const P = this.model.numParameters();
+      if (P <= this.exactDiagMaxP) {
+        this.exactDiagActive = true;
+      } else {
+        console.warn(`[Simulation] exactDiag requested but P=${P} exceeds cap ` +
+                     `${this.exactDiagMaxP}; exact diagonalization disabled for this run.`);
+      }
+    }
+
+    // Seed the analytic σ trajectory (if σ⋆ is available). σ is evolved from
+    // the Saxe ODE, decoupled from the trained weights — a parallel theoretical
+    // projection. L counts weight matrices (= layerSizes.length - 1). The
+    // grouped eigenvalue formulas in theory.js are L = 2 specific, but σ itself
+    // evolves at any L; we seed σ regardless and let the visualization layer
+    // decide whether the L = 2 eigenvalue overlay is meaningful (the widgets
+    // flag L ≠ 2). predictedLoss is L-agnostic, so the loss overlay is valid
+    // at any depth.
     if (p.sigmaStar) {
       const L = layerSizes.length - 1;
-      // Pad/truncate sigmaStar to length r = min(inputDim, outputDim) so the
-      // predictor matches the σ_i pairing in the GN eigenvalue formula. Modes
-      // beyond the supplied σ⋆ entries are zeros (low-rank-M directions).
       const r = Math.min(inputDim, outputDim);
       const sigmaStarPadded = new Array(r);
       for (let i = 0; i < r; i++) {
         sigmaStarPadded[i] = (p.sigmaStar[i] !== undefined) ? p.sigmaStar[i] : 0;
       }
-      this.predictor = new SaxePredictor({
-        sigmaStar: sigmaStarPadded,
-        L,
-        epsilon: p.initScale
-      });
+      this.sigmaStar = sigmaStarPadded;
+      this.theoryL = L;                                    // stored for the ODE step
+      this.sigmas = initialSingularValues(p.initScale, L, r);
     } else {
-      this.predictor = null;
+      this.sigmaStar = null;
+      this.theoryL = null;
+      this.sigmas = null;
     }
 
     // Reset histories
     this.iteration = 0;
     this.lossHistory = [];
     this.eigenvalueHistory = [];
-    this.predictedEigenvalueHistory = [];
+    this.exactEigenvalueHistory = [];
+    this.sigmaHistory = [];
     this.predictedLossHistory = [];
     this.gradProjectionHistory = [];
     this.topEigenvector = null;
     this.eigenvectorCaptureStep = null;
     this.eigenvectorCaptureValue = null;
 
-    // Seed the predicted history with the iteration-0 prediction so the
-    // overlay has a point to start from even before the first training step.
-    // (The measured history doesn't get a seed because Lanczos hasn't run
-    // yet at iter 0; the chart handles that asymmetry fine.)
-    if (this.predictor) {
-      this.predictedEigenvalueHistory.push({
+    // Seed σ at iteration 0 so the theory overlay has a t=0 anchor (matching
+    // the old code, which seeded the predicted histories at iter 0). The
+    // measured history gets no seed — Lanczos hasn't run yet at iter 0.
+    if (this.sigmas) {
+      this.sigmaHistory.push({
         iteration: 0,
-        eigs: this.predictor.currentEigenvalues()
+        sigmas: this.sigmas.slice()
       });
       this.predictedLossHistory.push({
         iteration: 0,
-        loss: this.predictor.currentLoss()
+        loss: predictedLoss(this.sigmas, this.sigmaStar)
       });
     }
   }
@@ -303,6 +365,21 @@ export class Simulation {
     }
 
     return eigs;
+  }
+
+  /**
+   * Exact full-Hessian eigenvalues via dense diagonalization. Returns the top-k
+   * eigenvalues ascending (same shape/convention as computeHessianEigenvalues),
+   * where k matches the Lanczos tracked count so the overlay aligns. Returns
+   * null if exact diagonalization isn't active for this run.
+   */
+  computeExactEigenvalues() {
+    if (!this.exactDiagActive || !this.trainer || !this.dataset) return null;
+    const { eigenvalues } = denseTopEigenvalues(
+      this.trainer, this.dataset.x, this.dataYArrays,
+      { kEigs: this.hessianOptions.kEigs, epsilon: this.exactDiagEpsilon }
+    );
+    return eigenvalues;
   }
 
   /**
@@ -369,11 +446,13 @@ export class Simulation {
     this.trainer = null;
     this.dataset = null;
     this.dataYArrays = null;
-    this.predictor = null;
+    this.sigmas = null;
+    this.sigmaStar = null;
     this.iteration = 0;
     this.lossHistory = [];
     this.eigenvalueHistory = [];
-    this.predictedEigenvalueHistory = [];
+    this.exactEigenvalueHistory = [];
+    this.sigmaHistory = [];
     this.predictedLossHistory = [];
     this.gradProjectionHistory = [];
     this.topEigenvector = null;
@@ -444,21 +523,27 @@ export class Simulation {
         if (eigs) {
           this.eigenvalueHistory.push({ iteration: this.iteration, eigs });
         }
+        // Exact dense diagonalization alongside Lanczos (opt-in, small models).
+        const exact = this.computeExactEigenvalues();
+        if (exact) {
+          this.exactEigenvalueHistory.push({ iteration: this.iteration, eigs: exact });
+        }
       }
 
-      // Theory prediction: advance the Saxe ODE by dt = η per step so that
-      // theory time tracks η·step exactly. Cheap compared to Lanczos.
-      // Record both predicted eigenvalues (for the sharpness plot) and
-      // predicted loss (for the loss plot) from the same advanced σ vector.
-      if (this.predictor) {
-        const predEigs = this.predictor.step(this.params.eta);
-        this.predictedEigenvalueHistory.push({
+      // Theory: advance the analytic σ by dt = η so theory time tracks η·step
+      // exactly (same Saxe ODE, same dt, same ε^L seed as before — bit-for-bit
+      // identical σ trajectory; only the storage changed). σ is decoupled from
+      // the trained weights. Store σ; derive eigenvalues later at plot time.
+      // Predicted loss is still computed here from this same σ (unchanged).
+      if (this.sigmas) {
+        this.sigmas = stepSaxeODE(this.sigmas, this.sigmaStar, this.theoryL, this.params.eta);
+        this.sigmaHistory.push({
           iteration: this.iteration,
-          eigs: predEigs
+          sigmas: this.sigmas.slice()
         });
         this.predictedLossHistory.push({
           iteration: this.iteration,
-          loss: this.predictor.currentLoss()
+          loss: predictedLoss(this.sigmas, this.sigmaStar)
         });
       }
 
@@ -504,11 +589,26 @@ export class Simulation {
   }
 
   getState() {
+    const inputDim  = this.params && this.params.M[0] ? this.params.M[0].length : null;
+    const outputDim = this.params && this.params.M     ? this.params.M.length    : null;
+    // First hidden-layer width — the m used by the L = 2 full-Hessian theory's
+    // hidden_null class (count 2·r·(m−r)). Null when no run is configured.
+    const hiddenWidth = (this.params && Array.isArray(this.params.hiddenDims) &&
+                         this.params.hiddenDims.length > 0)
+      ? this.params.hiddenDims[0] : null;
     return {
       iteration: this.iteration,
       lossHistory: this.lossHistory,
-      eigenvalueHistory: this.eigenvalueHistory,
-      predictedEigenvalueHistory: this.predictedEigenvalueHistory,
+      eigenvalueHistory: this.eigenvalueHistory,           // MEASURED (Lanczos)
+      exactEigenvalueHistory: this.exactEigenvalueHistory, // EXACT (dense diag, opt-in)
+      // Analytic σ trajectory + everything the visualization layer needs to
+      // derive grouped eigenvalues at plot time via theory_GN / theory_Hessian_full.
+      sigmaHistory: this.sigmaHistory,
+      sigmaStar: this.sigmaStar,
+      theoryL: this.theoryL || null,
+      inputDim,
+      outputDim,
+      hiddenWidth,
       predictedLossHistory: this.predictedLossHistory,
       gradProjectionHistory: this.gradProjectionHistory,
       topEigenvector: this.topEigenvector,

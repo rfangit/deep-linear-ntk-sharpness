@@ -7,13 +7,27 @@
 //     dσ_i/dt = L · σ_i^(2 − 2/L) · (σ_i⋆ − σ_i)
 //
 // alongside training, with the standard correspondence t ↔ η · step. Use the
-// integrated singular values to compute the (Gauss-Newton) Hessian eigenvalue
-// predictions from the blog post:
+// integrated singular values to compute Hessian eigenvalue predictions.
 //
-//   Aligned modes  (k = i,    i ≤ r):       L · s_i^(2(L−1)/L)
-//   Cross modes    (k ≠ i, both ≤ r):       Σ_{ℓ=1..L} s_k^(2(ℓ−1)/L) · s_i^(2(L−ℓ)/L)
-//   Low-rank-M     (i ≤ r, k > r,  σ_k⋆=0): cross formula with s_k = 0
-//   Extra data     (eigenvalue 0):          skipped — uninteresting
+// Two prediction flavors are exposed:
+//
+//   1. Gauss-Newton only — predictedEigenvalues / SaxePredictor. Uses
+//      H_GN = J^T J and yields the formulas from the blog post:
+//        Aligned modes (k = i, i ≤ r):     L · s_i^(2(L−1)/L)
+//        Cross modes   (k ≠ i, both ≤ r):  Σ_{ℓ=1..L} s_k^(2(ℓ−1)/L) · s_i^(2(L−ℓ)/L)
+//        Low-rank-M    (one of σ⋆ is 0):   cross formula with that s = 0
+//
+//   2. Gauss-Newton + Residual — predictedResidualEigenvalues /
+//      SaxeResidualPredictor. Adds the full Hessian residual term R, derived
+//      for the 2-layer (L = 2) case:
+//        Cross modes   (i < j):  (s_i + s_j) ± ρ_ij,
+//                                ρ_ij = (2 s_i s_j − s_i s_j⋆ − s_j s_i⋆)
+//                                        / (s_i + s_j)
+//      The aligned-mode contribution is currently under revision and is
+//      intentionally omitted; the predictor returns only the cross-mode
+//      eigenvalues sorted descending so the toggle can be used to sanity-
+//      check the cross-mode formula in isolation against measurements.
+//      Both branches λ_± are reported; negative branches are kept as-is.
 //
 // All r·n nonzero eigenvalues are computed each step; the caller decides how
 // many to plot.
@@ -246,4 +260,314 @@ export class SaxePredictor {
   currentSigmas() {
     return this.sigmas.slice();
   }
+}
+
+
+// ============================================================================
+// RESIDUAL-CORRECTED PREDICTION (H_GN + R)
+// ============================================================================
+// Same singular-value dynamics as the GN-only predictor (same ODE, same RK4,
+// same ε^L initial conditions) — only the eigenvalue formula differs. The
+// residual derivation in the writeup is L = 2 specific; we apply it for any
+// L and leave the UX to flag the mismatch.
+//
+// Aligned-mode eigenvalues carry multiplicity m (the hidden width); we
+// expand the multiplicities here so the descending-sorted top-k matches what
+// the empirical Lanczos spectrum reports.
+
+const RESIDUAL_NUMERICAL_EPS = 1e-10;
+
+/**
+ * Compute Hessian eigenvalues from the residual term R using only the
+ * cross-mode contribution. The aligned-mode formula is currently under
+ * revision and intentionally omitted; once it's resolved it will be added
+ * back here.
+ *
+ * Cross modes (i < j), both branches of the 2D {h_ij, h_ji} block:
+ *     λ_± = (s_i + s_j) ± ρ_ij
+ *     ρ_ij = (2 s_i s_j − s_i s_j⋆ − s_j s_i⋆) / (s_i + s_j)
+ *
+ * Modes with s_i + s_j ≈ 0 (e.g. at initialization with very small ε)
+ * collapse to ρ = 0 and λ_± = 0, matching the degenerate limit in the
+ * pseudocode.
+ *
+ * Returns the full list sorted descending. Negative branches are kept as-is;
+ * the caller slices the top k.
+ *
+ * @param {number[]} sigmas      — current σ_i, length r
+ * @param {number[]} sigmaStar   — target σ_i⋆, same length
+ * @param {number}   m           — aligned-mode multiplicity (= hidden width).
+ *                                 Currently unused since aligned modes are
+ *                                 omitted; kept in the signature so callers
+ *                                 don't need to change when the formula is
+ *                                 reinstated.
+ * @returns {number[]} sorted descending
+ */
+export function predictedResidualEigenvalues(sigmas, sigmaStar, m) {
+  const r = sigmas.length;
+  const eigs = [];
+
+  // Cross modes — both ± branches per unordered pair.
+  for (let i = 0; i < r; i++) {
+    for (let j = i + 1; j < r; j++) {
+      const s_i  = sigmas[i];
+      const s_j  = sigmas[j];
+      const s_i0 = sigmaStar[i] || 0;
+      const s_j0 = sigmaStar[j] || 0;
+      const gn   = s_i + s_j;
+      let rho;
+      if (gn > RESIDUAL_NUMERICAL_EPS) {
+        rho = (2 * s_i * s_j - s_i * s_j0 - s_j * s_i0) / gn;
+      } else {
+        rho = 0;
+      }
+      eigs.push(gn + rho);
+      eigs.push(gn - rho);
+    }
+  }
+
+  eigs.sort((a, b) => b - a);
+  return eigs;
+}
+
+/**
+ * Stateful predictor for the residual-corrected (H_GN + R) eigenvalues.
+ * Mirrors SaxePredictor exactly in lifecycle, but reports the residual
+ * formula instead of the GN-only formula. The dynamics are identical: same
+ * stepSaxeODE call with the same dt = η, so a paired (SaxePredictor,
+ * SaxeResidualPredictor) advance in lock-step.
+ *
+ * Loss prediction is left unchanged from SaxePredictor — the residual
+ * correction enters the Hessian curvature, not the loss value.
+ *
+ * Usage:
+ *   const res = new SaxeResidualPredictor({ sigmaStar, L, epsilon, hiddenWidth });
+ *   res.step(eta);
+ */
+export class SaxeResidualPredictor {
+  /**
+   * @param {object} opts
+   * @param {number[]} opts.sigmaStar    — target σ⋆, length r
+   * @param {number}   opts.L
+   * @param {number}   opts.epsilon
+   * @param {number}   opts.hiddenWidth  — m (aligned-mode multiplicity)
+   */
+  constructor({ sigmaStar, L, epsilon, hiddenWidth }) {
+    this.sigmaStar   = sigmaStar.slice();
+    this.L           = L;
+    this.epsilon     = epsilon;
+    this.hiddenWidth = hiddenWidth;
+    this.sigmas      = initialSingularValues(epsilon, L, sigmaStar.length);
+  }
+
+  currentEigenvalues() {
+    return predictedResidualEigenvalues(this.sigmas, this.sigmaStar, this.hiddenWidth);
+  }
+
+  currentLoss() {
+    return predictedLoss(this.sigmas, this.sigmaStar);
+  }
+
+  step(dt) {
+    this.sigmas = stepSaxeODE(this.sigmas, this.sigmaStar, this.L, dt);
+    return this.currentEigenvalues();
+  }
+
+  currentSigmas() {
+    return this.sigmas.slice();
+  }
+}
+
+
+// ============================================================================
+// GROUPED THEORY (2-LAYER) — stateless eigenvalue functions over σ
+// ============================================================================
+// Architecture: the simulation stores ONLY the singular-value trajectory σ(t).
+// At plot time the visualization layer calls these stateless functions on a
+// stored σ vector, choosing GN vs full (and which groups to draw) via user
+// knobs. Nothing here holds state or advances dynamics — that's stepSaxeODE.
+//
+// Strictly L = 2 (single hidden layer): the closed forms are 2-layer-specific.
+//
+// Two entry points:
+//
+//   theory_GN(sigmas, sigmaStar)
+//       → { aligned, cross, single_value }
+//     Gauss-Newton (H_GN = JᵀJ) eigenvalues.
+//       aligned       value = 2 s_i                         (one per nonzero mode)
+//       cross         GN branches per unordered pair {i,k}: σ=s_i+s_k (×2), 0 (×2)
+//       single_value  value = s_i                           (nonzero mode ⊗ zero mode)
+//
+//   theory_Hessian_full(sigmas, sigmaStar, n, d)
+//       → { aligned, aligned_null, cross, single_value }
+//     Full Hessian (H_GN + residual R) eigenvalues.
+//       aligned       value = 3 s_i − s_i0
+//       aligned_null  value = s_i0 − s_i      (null partner of aligned; gn=0)
+//       cross         closed form, computeCrossEigenvalues (full branch values)
+//       single_value  value = s_i             (residual trivial — identical to GN)
+//
+// single_value is shared and numerically identical between the two functions.
+// aligned_null is a residual/full construct only (it has no GN counterpart).
+// hidden_null (always 0) is intentionally omitted from both.
+//
+// Record schema: { value, indices, [branch] }. `indices` is a 2-tuple; a real
+// mode index where a singular value exists, null for a zero-mode partner slot.
+// `branch` (1..4) appears on cross records for grouping only — see the note in
+// computeCrossEigenvalues about per-branch vs set-level behavior.
+//
+// Counts (per call): aligned r, aligned_null r, cross 2·r(r−1) [full] or the
+// same shape for GN, single_value r·(n−r)+r·(d−r). r = sigmas.length.
+
+/**
+ * Closed-form eigenvalues of the 2-layer Hessian for one unordered nonzero
+ * pair {i,k}. Returns 4 records, each with BOTH the full and GN value (the
+ * caller keeps whichever it needs). Inputs guaranteed mid-training (σ>0).
+ *
+ * As verified previously, the per-branch (full,gn) pairing is not invariant in
+ * the s→s0 limit: at s==s0 the full set is {σ,0,σ,0} and the GN set is
+ * {σ,σ,0,0} — equal as SETS but not branch-by-branch. Downstream plotting sorts
+ * within a group per timepoint rather than tracking a fixed branch.
+ *
+ * @returns {Array<{value_full:number, value_gn:number, branch:number}>}
+ */
+export function computeCrossEigenvalues(s_i, s_k, s_i0, s_k0) {
+  const sigma = s_i + s_k;
+  const delta = (s_i - s_i0) - (s_k - s_k0);
+  const crossTerm = 4 * s_i * s_k * delta * delta / (sigma * sigma);
+
+  const D1 = Math.sqrt((s_i0 + s_k0) ** 2 + crossTerm);
+  const D2 = Math.sqrt((2 * sigma - s_i0 - s_k0) ** 2 + crossTerm);
+  const cp = sigma + (s_i - s_k) * delta / sigma;
+  const cm = sigma - (s_i - s_k) * delta / sigma;
+
+  return [
+    { value_full: 0.5 * (cp + D1), value_gn: sigma, branch: 1 }, // h_ik
+    { value_full: 0.5 * (cp - D1), value_gn: sigma, branch: 2 }, // h_ki
+    { value_full: 0.5 * (cm + D2), value_gn: 0,     branch: 3 }, // g_ik
+    { value_full: 0.5 * (cm - D2), value_gn: 0,     branch: 4 }  // g_ki
+  ];
+}
+
+/** Aligned mode indices/values are shared structure; tiny helpers keep the two
+ *  entry points readable and guarantee single_value matches between them. */
+function buildSingleValue(sigmas, n, d, r) {
+  const out = [];
+  for (let i = 0; i < r; i++) {
+    for (let t = 0; t < n - r; t++) out.push({ value: sigmas[i], indices: [i, null] });
+    for (let t = 0; t < d - r; t++) out.push({ value: sigmas[i], indices: [null, i] });
+  }
+  return out;
+}
+
+/**
+ * General-L Gauss-Newton cross/aligned eigenvalue for an ordered mode pair
+ * (k, i):  c_{ki} = Σ_{ℓ=1..L} s_k^(2(ℓ−1)/L) · s_i^(2(L−ℓ)/L).
+ * On the diagonal (k = i) this collapses to L · s_i^(2(L−1)/L) (the aligned
+ * value); off-diagonal it is the cross value. At L = 2 it gives s_i + s_k.
+ * This is the depth-general GN formula carried over from the original
+ * predictedEigenvalues; multiplicities for L > 2 are not modeled (they don't
+ * affect the GN eigenvalue *values*, only how many times each would appear).
+ */
+function gnCrossEig(sk, si, L) {
+  let sum = 0;
+  for (let ell = 1; ell <= L; ell++) {
+    // pow(0,0) === 1 in JS, which is the intended limit for degenerate terms.
+    sum += Math.pow(sk, (ell - 1) * 2 / L) * Math.pow(si, (L - ell) * 2 / L);
+  }
+  return sum;
+}
+
+/**
+ * Gauss-Newton eigenvalues, grouped. Stateless. Works for any depth L.
+ *
+ * Grouping (identical structure at all L):
+ *   aligned       diagonal pair (k = i): value = L · s_i^(2(L−1)/L)
+ *                 (= 2 s_i at L = 2). One per nonzero mode.
+ *   cross         off-diagonal ordered pairs (k ≠ i): value = c_{ki}
+ *                 (= s_i + s_k at L = 2).
+ *   single_value  one per nonzero mode: value = s_i (depth-independent; the GN
+ *                 single-value eigenvalue is the lone singular value).
+ *
+ * Two code paths, kept separate by design:
+ *   L === 2 → routes cross through computeCrossEigenvalues (the 2-layer closed
+ *             form), preserving the validated 4-branch structure and the
+ *             index.html top-k parity. aligned uses 2 s_i directly.
+ *   L !== 2 → uses the depth-general c_{ki} enumeration: diagonal → aligned,
+ *             each off-diagonal ORDERED pair → one cross record. (No zero
+ *             branches — those are specific to the 2-layer closed form.)
+ *
+ * @param {number[]} sigmas     current singular values, length r
+ * @param {number[]} sigmaStar  target singular values, length r (for cross, L=2)
+ * @param {number}   n          output dim (for single_value count)
+ * @param {number}   d          input dim (for single_value count)
+ * @param {number}   L          number of weight matrices (depth). Default 2.
+ * @returns {{aligned:Array, cross:Array, single_value:Array}}
+ */
+export function theory_GN(sigmas, sigmaStar, n, d, L = 2) {
+  const r = sigmas.length;
+  const aligned = [];
+  const cross = [];
+
+  if (L === 2) {
+    // 2-layer closed-form path (unchanged — preserves parity + zero branches).
+    for (let i = 0; i < r; i++) {
+      aligned.push({ value: 2 * sigmas[i], indices: [i, i] });
+    }
+    for (let i = 0; i < r; i++) {
+      for (let k = i + 1; k < r; k++) {
+        for (const e of computeCrossEigenvalues(sigmas[i], sigmas[k], sigmaStar[i] || 0, sigmaStar[k] || 0)) {
+          cross.push({ value: e.value_gn, indices: [i, k], branch: e.branch });
+        }
+      }
+    }
+  } else {
+    // Depth-general path: enumerate ordered pairs via c_{ki}.
+    for (let i = 0; i < r; i++) {
+      aligned.push({ value: gnCrossEig(sigmas[i], sigmas[i], L), indices: [i, i] });
+    }
+    for (let i = 0; i < r; i++) {
+      for (let k = 0; k < r; k++) {
+        if (k === i) continue;                       // diagonal handled as aligned
+        cross.push({ value: gnCrossEig(sigmas[k], sigmas[i], L), indices: [i, k] });
+      }
+    }
+  }
+
+  const single_value = buildSingleValue(sigmas, n, d, r);
+  return { aligned, cross, single_value };
+}
+
+/**
+ * Full-Hessian (GN + residual) eigenvalues, grouped. Stateless.
+ * STRICTLY L = 2 — the residual closed form is 2-layer-specific. Callers must
+ * not invoke this for L ≠ 2 (the plotting layer gates on depth).
+ * @param {number[]} sigmas     current singular values, length r
+ * @param {number[]} sigmaStar  target singular values, length r
+ * @param {number}   n          output dim
+ * @param {number}   d          input dim
+ * @returns {{aligned:Array, aligned_null:Array, cross:Array, single_value:Array}}
+ */
+export function theory_Hessian_full(sigmas, sigmaStar, n, d) {
+  const r = sigmas.length;
+
+  const aligned = [];
+  const aligned_null = [];
+  for (let i = 0; i < r; i++) {
+    const s = sigmas[i], s0 = sigmaStar[i] || 0;
+    aligned.push({ value: 3 * s - s0, indices: [i, i] });
+    aligned_null.push({ value: s0 - s, indices: [i, i] });
+  }
+
+  const cross = [];
+  for (let i = 0; i < r; i++) {
+    for (let k = i + 1; k < r; k++) {
+      for (const e of computeCrossEigenvalues(sigmas[i], sigmas[k], sigmaStar[i] || 0, sigmaStar[k] || 0)) {
+        cross.push({ value: e.value_full, indices: [i, k], branch: e.branch });
+      }
+    }
+  }
+
+  const single_value = buildSingleValue(sigmas, n, d, r);
+
+  return { aligned, aligned_null, cross, single_value };
 }
