@@ -20,6 +20,7 @@ import { formatTickLabel, baseChartOptions, CHART_FONT } from './chart-utils.js'
 import {
   aggregatePooled, aggregatePerClass, GN_GROUPS, FULL_GROUPS, GROUP_LABELS
 } from './theory-aggregate.js';
+import { gnSharpnessRMT, gnSharpnessRMTFinite } from './theory.js';
 
 const MAX_PLOT_POINTS = 1000;
 
@@ -37,6 +38,13 @@ const NEUTRAL_PRED_COLOR = 'rgb(0, 0, 0)';
 // Stroke patterns distinguish the two theories when both are shown.
 const GN_DASH   = [2, 4];        // dotted   (matches the original theory line)
 const FULL_DASH = [6, 3, 2, 3];  // dash-dot
+// Init-time RMT sharpness reference line (residuals.html). A solid, distinctly
+// colored horizontal line at the Marchenko–Pastur top-GN-eigenvalue prediction.
+const RMT_COLOR = 'rgb(190, 30, 160)';  // magenta — stands apart from eig colors
+const RMT_DASH  = [10, 4];              // long dash, distinct from the 2/η line
+// Finite-correction variant: same magenta family (both are the RMT prediction),
+// but a finer dotted dash so the two are visually separable on the plot.
+const RMT_FINITE_DASH = [3, 3];
 // (The exact dense spectrum is no longer a distinct overlay — when selected it
 // is drawn through the measured eigenvalue curves in their normal solid style;
 // see RightChart.eigenvalueSource and update().)
@@ -381,7 +389,17 @@ export class RightChart {
       strategy:     pc.strategy === 'perClass' ? 'perClass' : 'pooled',
       k:            (typeof pc.k === 'number' && pc.k > 0) ? pc.k : this.kEigs,
       perClassK:    pc.perClassK ? { ...pc.perClassK } : {},
-      show:         pc.show !== false
+      show:         pc.show !== false,
+      // Init-time RMT reference lines. Independent of `show` (the theory-overlay
+      // master toggle): these are separate plotting options with their own
+      // checkboxes. Two variants share one rmtParams ({ d, h, o, v1, v2 }):
+      //   showRMT       — hard MP edge bound (gnSharpnessRMT), an upper bound.
+      //   showRMTFinite — Tracy–Widom finite-size correction (gnSharpnessRMTFinite),
+      //                   the expected top eigenvalue at finite dims (sits below
+      //                   the hard edge). Both off by default → index.html intact.
+      showRMT:       pc.showRMT === true,
+      showRMTFinite: pc.showRMTFinite === true,
+      rmtParams:     pc.rmtParams || null
     };
     // Reusable prediction-dataset pool size. Caps total theory curves drawn at
     // once (summed over theories and classes). Raise for dense perClass views.
@@ -454,6 +472,39 @@ export class RightChart {
         order: 0
       });
     }
+
+    // Init-time RMT sharpness line — a horizontal reference at the
+    // Marchenko–Pastur top-GN-eigenvalue prediction. Same span treatment as the
+    // 2/η threshold (spans the union of measured + σ x-ranges), but gated on the
+    // showRMT flag rather than always drawn. Populated in update().
+    this.idx.rmt = datasets.length;
+    datasets.push({
+      label: 'Init. GN λ_rmt',
+      data: [],
+      borderColor: RMT_COLOR,
+      borderWidth: 2.5,
+      borderDash: RMT_DASH,
+      pointRadius: 0,
+      tension: 0,
+      order: 0,
+      hidden: true
+    });
+
+    // Finite-corrected RMT line (Tracy–Widom). Same treatment as the hard-edge
+    // line above, gated on showRMTFinite. Drawn in the same magenta with a finer
+    // dash so both can be shown together and told apart.
+    this.idx.rmtFinite = datasets.length;
+    datasets.push({
+      label: 'Init. GN λ_rmt (finite)',
+      data: [],
+      borderColor: RMT_COLOR,
+      borderWidth: 2.5,
+      borderDash: RMT_FINITE_DASH,
+      pointRadius: 0,
+      tension: 0,
+      order: 0,
+      hidden: true
+    });
 
     // Measured eigenvalue curves (solid, colored). Allocate up to
     // maxDisplayEigs (= tracked count) so the displayed count can be raised
@@ -559,7 +610,15 @@ export class RightChart {
     const exactActive = this.eigenvalueSource === 'exact' &&
                         this._lastExactHistory && this._lastExactHistory.length > 0;
     const srcTag = exactActive ? ' (exact)' : '';
-    for (let i = 0; i < this.kEigs && i < this.maxDisplayEigs; i++) {
+    // The legend lists one entry per displayed curve, but the exact spectrum can
+    // put hundreds of curves on the plot — far too many to label individually.
+    // Cap the legend at LEGEND_EIG_CAP individual entries; when the display count
+    // exceeds that, list the first few and append a single summary entry noting
+    // how many curves are drawn. The curves themselves are all still plotted.
+    const LEGEND_EIG_CAP = 12;
+    const shownEigs = this.kEigs;
+    const labeledEigs = Math.min(shownEigs, LEGEND_EIG_CAP);
+    for (let i = 0; i < labeledEigs; i++) {
       const color = this._eigColors[i] || this._eigColors[i % this._eigColors.length];
       out.push({
         text: this._eigLabel(i) + (i === 0 ? srcTag : ''),
@@ -567,6 +626,14 @@ export class RightChart {
         lineWidth: 2, lineDash: [],
         hidden: false,
         datasetIndex: this.idx.eigs ? this.idx.eigs[i] : undefined
+      });
+    }
+    if (shownEigs > labeledEigs) {
+      out.push({
+        text: `… +${shownEigs - labeledEigs} more${srcTag && labeledEigs === 0 ? srcTag : ''}`,
+        strokeStyle: '#888', fillStyle: '#888',
+        lineWidth: 2, lineDash: [],
+        hidden: false
       });
     }
 
@@ -577,6 +644,29 @@ export class RightChart {
         text: '2/η', strokeStyle: t.color, fillStyle: t.color,
         lineWidth: t.width, lineDash: t.dash,
         hidden: false, datasetIndex: this.idx.threshold
+      });
+    }
+
+    // Init-time RMT sharpness lines. Shown in the legend only when the relevant
+    // checkbox is on AND the depth is L = 2 (the RMT/MP top-GN prediction is
+    // 2-layer). Hard-edge (upper bound) and finite (Tracy–Widom) are independent.
+    const isL2RMT = (this._lastL || 2) === 2;
+    if (this.predictionConfig && this.predictionConfig.showRMT &&
+        isL2RMT && this.idx.rmt !== undefined) {
+      out.push({
+        text: 'Init. GN λ_rmt',
+        strokeStyle: RMT_COLOR, fillStyle: RMT_COLOR,
+        lineWidth: 2.5, lineDash: RMT_DASH,
+        hidden: false, datasetIndex: this.idx.rmt
+      });
+    }
+    if (this.predictionConfig && this.predictionConfig.showRMTFinite &&
+        isL2RMT && this.idx.rmtFinite !== undefined) {
+      out.push({
+        text: 'Init. GN λ_rmt (finite)',
+        strokeStyle: RMT_COLOR, fillStyle: RMT_COLOR,
+        lineWidth: 2.5, lineDash: RMT_FINITE_DASH,
+        hidden: false, datasetIndex: this.idx.rmtFinite
       });
     }
 
@@ -625,6 +715,51 @@ export class RightChart {
   }
 
   /**
+   * Redraw from cached history without a new sim frame (falls back to a bare
+   * chart refresh if nothing's plotted yet, so the legend updates immediately).
+   * Shared by the live RMT toggles/param setters.
+   */
+  _liveRedraw() {
+    if (this._lastEigHistory) {
+      this.update(
+        this._lastEigHistory, this.eta, this._lastSigmaHistory,
+        this._lastSigmaStar, this._lastN, this._lastD, this._lastM, this._lastL,
+        { exactEigenvalueHistory: this._lastExactHistory }
+      );
+    } else {
+      this.chart.update('none');
+    }
+  }
+
+  /**
+   * Toggle the init-time RMT sharpness reference line (hard MP edge / upper
+   * bound). Independent of the theory-overlay master toggle.
+   */
+  setShowRMT(show) {
+    this.predictionConfig.showRMT = !!show;
+    this._liveRedraw();
+  }
+
+  /**
+   * Toggle the finite-corrected RMT line (Tracy–Widom). Independent of both the
+   * overlay master toggle and the hard-edge line — either, both, or neither.
+   */
+  setShowRMTFinite(show) {
+    this.predictionConfig.showRMTFinite = !!show;
+    this._liveRedraw();
+  }
+
+  /**
+   * Set the RMT line inputs: { d, h, o, v1, v2 } (input dim, hidden width,
+   * output dim, and the two per-element init variances). Shared by both RMT
+   * variants. Live redraw.
+   */
+  setRMTParams(params) {
+    this.predictionConfig.rmtParams = params || null;
+    this._liveRedraw();
+  }
+
+  /**
    * Choose which eigenvalue history drives the measured curves: 'lanczos' or
    * 'exact'. Live — repaints from cached history without a new sim frame, same
    * as setDisplayK. 'exact' silently falls back to Lanczos if no exact history
@@ -644,12 +779,47 @@ export class RightChart {
   }
 
   /**
-   * Set the number of MEASURED eigenvalue curves displayed (live). Clamped to
-   * [0, maxDisplayEigs] (the tracked count). Repaints from the cached measured
-   * history without needing a new simulation frame.
+   * Ensure the measured-curve dataset pool (idx.eigs) can hold at least `need`
+   * curves, growing it on demand by appending new line datasets. Construction
+   * pre-allocates maxDisplayEigs (a modest ceiling sized for Lanczos); exact
+   * diagonalization can require many more (up to P), so we extend lazily here.
+   * New datasets reuse the cyclic eig colors/labels and the same styling, and
+   * are appended at the end of the dataset array (Chart.js z-orders by the
+   * `order` property, not array position, so ordering is unaffected). Idempotent.
+   */
+  _ensureEigCapacity(need) {
+    const have = this.idx.eigs.length;
+    if (need <= have) return;
+    for (let i = have; i < need; i++) {
+      const dsIdx = this.chart.data.datasets.length;
+      this.chart.data.datasets.push({
+        label: this._eigLabel(i),
+        data: [],
+        borderColor: this._eigColors[i % this._eigColors.length],
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0,
+        order: i + 1,
+        hidden: true
+      });
+      this.idx.eigs.push(dsIdx);
+    }
+    // Raise the ceiling so setDisplayK lets the user reach the new capacity.
+    if (need > this.maxDisplayEigs) this.maxDisplayEigs = need;
+  }
+
+  /**
+   * Set the number of MEASURED eigenvalue curves displayed (live). Repaints from
+   * the cached measured history without a new simulation frame. The cap is the
+   * larger of maxDisplayEigs and the current source's available eigenvalue count
+   * — so when the exact dense spectrum is selected the user can dial all the way
+   * up to P (the pool grows on demand in update()); for Lanczos it stays bounded
+   * by the tracked count as before.
    */
   setDisplayK(k) {
-    const clamped = Math.max(0, Math.min(Math.floor(k), this.maxDisplayEigs));
+    const avail = this._availableEigCount();
+    const cap = Math.max(this.maxDisplayEigs, avail);
+    const clamped = Math.max(0, Math.min(Math.floor(k), cap));
     this.kEigs = clamped;
     if (this._lastEigHistory) {
       this.update(
@@ -662,6 +832,20 @@ export class RightChart {
       // new display count immediately.
       this.chart.update('none');
     }
+  }
+
+  /**
+   * How many eigenvalues the CURRENTLY SELECTED source provides per timepoint.
+   * Exact → full spectrum length P; Lanczos → its tracked count. Used to cap the
+   * display count (exact can show all P; Lanczos stays at its tracked count).
+   * Reads the cached histories; returns 0 when nothing has been plotted yet.
+   */
+  _availableEigCount() {
+    const exactHist = this._lastExactHistory;
+    const useExact = this.eigenvalueSource === 'exact' && exactHist && exactHist.length > 0;
+    const hist = useExact ? exactHist : this._lastEigHistory;
+    if (hist && hist.length > 0 && hist[0].eigs) return hist[0].eigs.length;
+    return 0;
   }
 
   /** Which theories to draw: array subset of ['gn','full']. */
@@ -778,19 +962,47 @@ export class RightChart {
     const dataKEigs = drawHistory[0].eigs.length;
 
     // 2/η threshold line — spans the union of measured and σ x-ranges.
+    let spanFirstX = toX(eigenvalueHistory[0].iteration);
+    let spanLastX = toX(eigenvalueHistory[eigenvalueHistory.length - 1].iteration);
+    if (sigmaHistory && sigmaHistory.length > 0) {
+      const pFirst = toX(sigmaHistory[0].iteration);
+      const pLast = toX(sigmaHistory[sigmaHistory.length - 1].iteration);
+      if (pFirst < spanFirstX) spanFirstX = pFirst;
+      if (pLast > spanLastX) spanLastX = pLast;
+    }
     if (this.idx.threshold !== undefined) {
-      let firstX = toX(eigenvalueHistory[0].iteration);
-      let lastX = toX(eigenvalueHistory[eigenvalueHistory.length - 1].iteration);
-      if (sigmaHistory && sigmaHistory.length > 0) {
-        const pFirst = toX(sigmaHistory[0].iteration);
-        const pLast = toX(sigmaHistory[sigmaHistory.length - 1].iteration);
-        if (pFirst < firstX) firstX = pFirst;
-        if (pLast > lastX) lastX = pLast;
-      }
       this.chart.data.datasets[this.idx.threshold].data = [
-        { x: firstX, y: threshold },
-        { x: lastX, y: threshold }
+        { x: spanFirstX, y: threshold },
+        { x: spanLastX, y: threshold }
       ];
+    }
+
+    // Init-time RMT sharpness lines. Same span as the 2/η threshold, gated on
+    // each variant's flag and L = 2 (the MP/RMT top-GN prediction is 2-layer).
+    // Both read the same dims + init variances from predictionConfig.rmtParams;
+    // they differ only in the edge estimate: hard MP edge (upper bound) vs the
+    // Tracy–Widom finite-size correction.
+    {
+      const rp = this.predictionConfig.rmtParams;
+      const isL2 = (this._lastL || 2) === 2;
+      const variants = [
+        { dsIdx: this.idx.rmt,       on: this.predictionConfig.showRMT,       fn: gnSharpnessRMT },
+        { dsIdx: this.idx.rmtFinite, on: this.predictionConfig.showRMTFinite, fn: gnSharpnessRMTFinite }
+      ];
+      for (const v of variants) {
+        const ds = this.chart.data.datasets[v.dsIdx];
+        if (v.on && isL2 && rp) {
+          const y = v.fn(rp.d, rp.h, rp.o, rp.v1, rp.v2);
+          if (isFinite(y)) {
+            ds.data = [{ x: spanFirstX, y }, { x: spanLastX, y }];
+            ds.hidden = false;
+          } else {
+            ds.data = []; ds.hidden = true;
+          }
+        } else {
+          ds.data = []; ds.hidden = true;
+        }
+      }
     }
 
     // Measured eigenvalue curves: eigs ascending, so eigs[last] = λ₁. Draw the
@@ -798,6 +1010,12 @@ export class RightChart {
     // (Lanczos or exact — see drawHistory above), bounded by what the data
     // holds; hide any remaining allocated datasets (display count may have been
     // lowered, or the data has fewer than kEigs eigenvalues).
+    //
+    // The exact dense spectrum can have many more eigenvalues (up to P) than the
+    // construction-time pool, so grow the pool on demand to whatever we're about
+    // to draw (min of the requested display count and what the data provides).
+    const drawCount = Math.min(this.kEigs, dataKEigs);
+    this._ensureEigCapacity(drawCount);
     for (let eigIdx = 0; eigIdx < this.idx.eigs.length; eigIdx++) {
       const dsIdx = this.idx.eigs[eigIdx];
       if (eigIdx < this.kEigs && eigIdx < dataKEigs) {
@@ -949,14 +1167,37 @@ export class RightChart {
     const useExact = this.eigenvalueSource === 'exact' && exactHist && exactHist.length > 0;
     const drawHistory = useExact ? exactHist : eigenvalueHistory;
 
+    // Only the DISPLAYED curves should drive the y-axis, not the entire stored
+    // spectrum. eigs is ascending, so the drawn curves are the top kEigs — the
+    // last `shown` entries of each point's eigs array (same slice the measured-
+    // curve draw loop uses). Without this bound the exact source would scale the
+    // axis to all P eigenvalues even when only a handful are shown, zooming the
+    // plot out to fit curves that aren't drawn.
+    const dataLen = drawHistory[0].eigs.length;
+    const shown = Math.min(this.kEigs, dataLen);
+    const loIdx = dataLen - shown;   // first displayed index within ascending eigs
+
     let maxEig = this.clipToEos ? threshold : 0;
     for (const point of drawHistory) {
-      for (const e of point.eigs) if (e > maxEig) maxEig = e;
+      for (let i = loIdx; i < dataLen; i++) {
+        const e = point.eigs[i];
+        if (e > maxEig) maxEig = e;
+      }
     }
     if (this.predictionConfig.show) {
       for (const dsIdx of this.idx.predPool) {
         const ds = this.chart.data.datasets[dsIdx];
         if (ds.hidden) continue;
+        for (const pt of ds.data) if (pt.y > maxEig) maxEig = pt.y;
+      }
+    }
+    // The RMT reference lines, when shown, should be in view too (they can sit
+    // well above the measured curves at large init scale). Independent of the
+    // overlay master toggle, so checked separately.
+    for (const dsIdx of [this.idx.rmt, this.idx.rmtFinite]) {
+      if (dsIdx === undefined) continue;
+      const ds = this.chart.data.datasets[dsIdx];
+      if (!ds.hidden) {
         for (const pt of ds.data) if (pt.y > maxEig) maxEig = pt.y;
       }
     }
@@ -966,12 +1207,16 @@ export class RightChart {
     }
     this.chart.options.scales.y.max = yMax;
 
-    // The exact spectrum is indefinite (can have negative eigenvalues). When the
-    // drawn source goes negative, drop the zero-floor so the negative branch is
-    // visible; otherwise keep the default zero-floor.
+    // The exact spectrum is indefinite (can have negative eigenvalues). When a
+    // DISPLAYED curve goes negative, drop the zero-floor so the negative branch
+    // is visible; otherwise keep the default zero-floor. Bounded to the displayed
+    // curves for the same reason as the max scan above.
     let minEig = 0;
     for (const point of drawHistory) {
-      for (const e of point.eigs) if (e < minEig) minEig = e;
+      for (let i = loIdx; i < dataLen; i++) {
+        const e = point.eigs[i];
+        if (e < minEig) minEig = e;
+      }
     }
     if (minEig < 0) {
       this.chart.options.scales.y.beginAtZero = false;

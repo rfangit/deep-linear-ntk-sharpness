@@ -241,6 +241,9 @@ export function initWidget(prefix = '', options = {}) {
       state.theoryL,
       { exactEigenvalueHistory: state.exactEigenvalueHistory }
     );
+    // The exact spectrum's length P becomes known once exact history exists;
+    // refresh the displayed-count cap so the input can reach all P.
+    rightChart._refreshDisplayCap?.();
   };
 
   // Re-draw the sharpness chart from current state with the new theory-aware
@@ -601,11 +604,14 @@ export function initWidget(prefix = '', options = {}) {
     el('initScaleSlider').addEventListener('input', () => {
       const v = parseFloat(logSliderToValue(parseFloat(el('initScaleSlider').value), INIT_SCALE_SLIDER_MIN, INIT_SCALE_SLIDER_MAX).toPrecision(4));
       appState.initScale = v; el('initScaleNumber').value = parseFloat(v.toPrecision(6)); appState.save();
+      // RMT line value depends on ε; keep it live as the scale is dragged.
+      rightChart._theoryControlsRefreshCaps?.();
     });
     el('initScaleNumber').addEventListener('change', () => {
       let v = parseFloat(el('initScaleNumber').value);
       if (!isFinite(v) || v <= 0) { setInitScaleUI(appState.initScale); return; }
       appState.initScale = v; setInitScaleUI(v); appState.save();
+      rightChart._theoryControlsRefreshCaps?.();
     });
   }
 
@@ -790,10 +796,14 @@ export function initWidget(prefix = '', options = {}) {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex; flex-direction:column; gap:10px; font-size:14px;';
 
-    // Displayed eigenvalues (live).
+    // Displayed eigenvalues (live). Note: no static `max` attribute — the cap is
+    // source-dependent (tracked count for Lanczos, P for the exact spectrum) and
+    // is enforced live in the change handler via currentDisplayCap(). A fixed max
+    // attribute would wrongly pre-block raising the count after switching to the
+    // exact source, so we omit it and clamp on commit instead.
     const dispRow = document.createElement('div');
     dispRow.className = 'inline-field';
-    const dispNum = mkNumber(currentDisplayEigs, 0, trackedEigs);
+    const dispNum = mkNumber(currentDisplayEigs, 0);
     dispRow.appendChild(document.createTextNode('Displayed eigenvalues '));
     dispRow.appendChild(dispNum);
     const dispNote = document.createElement('span');
@@ -875,6 +885,8 @@ export function initWidget(prefix = '', options = {}) {
         srcCb.checked = false;
         rightChart.setEigenvalueSource('lanczos');
       }
+      // Keep the displayed-count cap/note in sync with the active source.
+      if (typeof refreshDisplayCap === 'function') refreshDisplayCap();
     };
 
     const lockedNote = document.createElement('div');
@@ -883,10 +895,46 @@ export function initWidget(prefix = '', options = {}) {
 
     host.appendChild(wrap);
 
-    // Displayed count: live. Clamp ≤ tracked, push to chart immediately.
+    // The displayed-count cap depends on the active source: Lanczos is bounded
+    // by its tracked count, but the exact dense spectrum exposes all P
+    // eigenvalues, so the user can dial up to P. We read P straight from the
+    // simulation's stored exact history (the source of truth) so the cap is
+    // correct even if the chart hasn't cached a frame yet. Falls back to the
+    // tracked count when exact isn't selected or no exact spectrum exists.
+    function exactSpectrumLength() {
+      const h = simulation.exactEigenvalueHistory;
+      if (h && h.length > 0 && h[h.length - 1].eigs) return h[h.length - 1].eigs.length;
+      return 0;
+    }
+    function currentDisplayCap() {
+      if (srcCb.checked) {
+        const P = exactSpectrumLength();
+        return P > 0 ? P : simulation.hessianOptions.kEigs;
+      }
+      return simulation.hessianOptions.kEigs;
+    }
+
+    // Refresh the displayed-count note + re-clamp the current value to the live
+    // cap. We deliberately do NOT set dispNum.max (a hard attribute would block
+    // raising the count after switching to exact); the change handler clamps via
+    // currentDisplayCap() instead.
+    function refreshDisplayCap() {
+      const cap = currentDisplayCap();
+      const exactOn = srcCb.checked;
+      dispNote.textContent = exactOn
+        ? `(live, max ${cap} — full exact spectrum)`
+        : `(live, max ${cap})`;
+      // Re-clamp if the current value now exceeds the cap (e.g. exact→Lanczos).
+      if (currentDisplayEigs > cap) {
+        currentDisplayEigs = cap; dispNum.value = cap; rightChart.setDisplayK(cap);
+      }
+    }
+    rightChart._refreshDisplayCap = refreshDisplayCap;
+
+    // Displayed count: live. Clamp to the source-aware cap, push immediately.
     dispNum.addEventListener('change', () => {
       let v = Math.max(0, Math.round(parseFloat(dispNum.value) || 0));
-      v = Math.min(v, simulation.hessianOptions.kEigs);
+      v = Math.min(v, currentDisplayCap());
       dispNum.value = v;
       currentDisplayEigs = v;
       rightChart.setDisplayK(v);
@@ -903,10 +951,8 @@ export function initWidget(prefix = '', options = {}) {
       let v = Math.max(1, Math.round(parseFloat(trackNum.value) || 1));
       trackNum.value = v;
       simulation.hessianOptions.kEigs = v;
-      // keep displayed ≤ tracked
-      dispNum.max = v;
-      dispNote.textContent = `(live, max ${v})`;
-      if (currentDisplayEigs > v) { currentDisplayEigs = v; dispNum.value = v; rightChart.setDisplayK(v); }
+      // keep displayed ≤ cap (source-aware); refresh max + note.
+      refreshDisplayCap();
     });
 
     iterNum.addEventListener('change', () => {
@@ -923,9 +969,12 @@ export function initWidget(prefix = '', options = {}) {
     });
 
     // Plot-source toggle is LIVE (both spectra are already computed). 'exact'
-    // falls back to Lanczos in the chart if no exact history exists yet.
+    // falls back to Lanczos in the chart if no exact history exists yet. Toggling
+    // the source changes the displayed-count cap (P for exact, tracked for
+    // Lanczos), so refresh it here.
     srcCb.addEventListener('change', () => {
       rightChart.setEigenvalueSource(srcCb.checked ? 'exact' : 'lanczos');
+      refreshDisplayCap();
     });
 
     runControlsLock = () => {
@@ -1024,6 +1073,22 @@ export function initWidget(prefix = '', options = {}) {
     thRow.appendChild(fullCb.label);
     wrap.appendChild(thRow);
 
+    // ── Random Matrix Theory init-sharpness lines (own row) ──
+    // Two standalone booleans (predictionConfig.showRMT / showRMTFinite),
+    // independent of the GN/full theories and the pooled/per-class strategy. Both
+    // draw a horizontal line at the predicted top GN eigenvalue at init:
+    //   exact upper limit — hard MP edge bound (overestimates at finite size)
+    //   finite correction — Tracy–Widom expected top eigenvalue (sits below it)
+    // Either, both, or neither may be on. Gated to L = 2 (2-layer prediction).
+    const rmtRow = document.createElement('div');
+    rmtRow.className = 'inline-row';
+    const rmtCb = mkCheckbox('exact upper limit', !!rightChart.predictionConfig.showRMT);
+    const rmtFiniteCb = mkCheckbox('finite correction', !!rightChart.predictionConfig.showRMTFinite);
+    rmtRow.appendChild(labelWrap('Random Matrix (Large Lim.):', null, true));
+    rmtRow.appendChild(rmtCb.label);
+    rmtRow.appendChild(rmtFiniteCb.label);
+    wrap.appendChild(rmtRow);
+
     // ── Strategy ──
     const stRow = document.createElement('div');
     stRow.className = 'inline-row';
@@ -1101,6 +1166,14 @@ export function initWidget(prefix = '', options = {}) {
         ci.num.disabled = !fullOn;
         ci.row.style.opacity = fullOn ? '1' : '0.45';
       }
+
+      // The RMT reference lines are also 2-layer-only. Disable + grey at L != 2.
+      // (The chart independently gates drawing on L = 2, so this is purely the
+      // UI affordance.)
+      for (const cbx of [rmtCb, rmtFiniteCb]) {
+        cbx.input.disabled = !isL2;
+        cbx.label.style.opacity = isL2 ? '1' : '0.45';
+      }
     }
 
     function pushConfig() {
@@ -1110,6 +1183,23 @@ export function initWidget(prefix = '', options = {}) {
       for (const g of THEORY_GROUPS) rightChart.setClassK(g, cfg.perClassK[g] || 0);
       // A single repaint is enough; the setters each repaint but that's cheap
       // and keeps the code simple.
+    }
+
+    // Push the RMT line state: enable flag + the current dims and per-element
+    // init variances. We map the writeup's (d, h, o) = (input, hidden, output)
+    // and compute the variances under the widget's muP init,
+    //   W_ℓ ~ N(0, ε²/n_{ℓ-1})  ⇒  v1 = ε²/d, v2 = ε²/h.
+    // gnSharpnessRMT takes the variances directly, so switching to a different
+    // convention later (e.g. fan-avg ε²/(n_in+n_out)) is a change to ONLY these
+    // two lines — theory.js and the chart are untouched.
+    function pushRMT() {
+      const d = appState.inputDim, h = appState.hiddenDim1, o = appState.outputDim;
+      const eps = appState.initScale;
+      const v1 = (eps * eps) / d;
+      const v2 = (eps * eps) / h;
+      rightChart.setRMTParams({ d, h, o, v1, v2 });
+      rightChart.setShowRMT(rmtCb.input.checked);
+      rightChart.setShowRMTFinite(rmtFiniteCb.input.checked);
     }
 
     function updateNotice() {
@@ -1135,6 +1225,8 @@ export function initWidget(prefix = '', options = {}) {
     perClassRadio.input.addEventListener('change', () => {
       if (perClassRadio.input.checked) { cfg.strategy = 'perClass'; syncStrategyVisibility(); pushConfig(); }
     });
+    rmtCb.input.addEventListener('change', () => { pushRMT(); });
+    rmtFiniteCb.input.addEventListener('change', () => { pushRMT(); });
     pooledK.addEventListener('change', () => {
       cfg.k = Math.max(0, Math.round(parseFloat(pooledK.value) || 0));
       pooledK.value = cfg.k; pushConfig();
@@ -1163,14 +1255,15 @@ export function initWidget(prefix = '', options = {}) {
         classInputs[g].num.value = v; cfg.perClassK[g] = v;
         classInputs[g].row.querySelector('span:last-child').textContent = `(max ${c[g]})`;
       }
-      updateNotice(); pushConfig();
+      updateNotice(); pushConfig(); pushRMT();
     }
-    el('useSecondLayerCheckbox')?.addEventListener('change', () => { syncStrategyVisibility(); updateNotice(); pushConfig(); });
-    el('useThirdLayerCheckbox')?.addEventListener('change', () => { syncStrategyVisibility(); updateNotice(); pushConfig(); });
+    el('useSecondLayerCheckbox')?.addEventListener('change', () => { syncStrategyVisibility(); updateNotice(); pushConfig(); pushRMT(); });
+    el('useThirdLayerCheckbox')?.addEventListener('change', () => { syncStrategyVisibility(); updateNotice(); pushConfig(); pushRMT(); });
 
     syncStrategyVisibility();
     updateNotice();
     pushConfig();
+    pushRMT();
 
     // Expose a refresh hook so dimension-input handlers can recompute caps.
     rightChart._theoryControlsRefreshCaps = refreshCaps;

@@ -329,6 +329,90 @@ export function theory_GN(sigmas, sigmaStar, n, d, L = 2) {
 }
 
 /**
+ * Random-matrix-theory prediction of the TOP Gauss-Newton eigenvalue at
+ * initialization for a 2-layer linear network f(x) = W2 W1 x, with
+ * W1 ∈ ℝ^{h×d} and W2 ∈ ℝ^{o×h} initialized with i.i.d. mean-zero entries of
+ * per-element variance v1 (for W1) and v2 (for W2).
+ *
+ * In the large-matrix limit the Marchenko–Pastur law places the largest
+ * singular value of an m×n i.i.d. matrix (variance v) at √v(√m + √n). The top
+ * nonzero GN eigenvalue is λ_ik = p_i² + t_k² (p: singular values of W1, t: of
+ * W2), maximized by pairing the two largest singular values:
+ *
+ *     λ_max = p_max² + t_max²
+ *           = v1 (√h + √d)² + v2 (√o + √h)².
+ *
+ * The variances are passed in directly (rather than derived from an ε and an
+ * assumed scaling) so any initialization convention is supported — e.g. muP
+ * v1 = ε²/d, v2 = ε²/h, or a fan-avg v = ε²/(n_in + n_out) — by computing the
+ * variances at the call site.
+ *
+ * @param {number} d   input dimension  (W1 is h×d)
+ * @param {number} h   hidden width      (W1 is h×d, W2 is o×h)
+ * @param {number} o   output dimension  (W2 is o×h)
+ * @param {number} v1  per-element variance of W1 entries
+ * @param {number} v2  per-element variance of W2 entries
+ * @returns {number}   predicted top GN eigenvalue λ_rmt (NaN if inputs invalid)
+ */
+export function gnSharpnessRMT(d, h, o, v1, v2) {
+  if (![d, h, o, v1, v2].every(x => typeof x === 'number' && isFinite(x))) return NaN;
+  if (d <= 0 || h <= 0 || o <= 0 || v1 < 0 || v2 < 0) return NaN;
+  const pMax = Math.sqrt(v1) * (Math.sqrt(h) + Math.sqrt(d));   // top σ of W1
+  const tMax = Math.sqrt(v2) * (Math.sqrt(o) + Math.sqrt(h));   // top σ of W2
+  return pMax * pMax + tMax * tMax;
+}
+
+// Mean of the Tracy–Widom (β = 1, real) distribution — the limiting law of the
+// centered/scaled top eigenvalue of a real Wishart/Gram matrix. The expected
+// top eigenvalue sits BELOW the bulk edge by |⟨TW₁⟩|·σ, which is exactly why the
+// hard-edge bound (gnSharpnessRMT) overestimates the realized sharpness.
+const TW1_MEAN = -1.2065;
+
+/**
+ * Expected top eigenvalue of the unit-variance Gram matrix (1/N) of an m×n
+ * i.i.d. matrix, with Johnstone's finite-size centering/scaling and the
+ * Tracy–Widom mean shift:
+ *     λ_top ≈ μ + ⟨TW₁⟩·σ,
+ *     μ = (√(m−½) + √(n−½))²,
+ *     σ = √μ · (1/√(m−½) + 1/√(n−½))^{1/3}.
+ * Returned in UNIT-variance eigenvalue units (caller multiplies by the per-
+ * element variance v). This is the squared-top-singular-value of a unit-variance
+ * matrix; we work in eigenvalue units throughout so no square/√ round-trip is
+ * needed. Floored at 0 (the shift is negative and could underflow for tiny dims).
+ */
+function expectedTopGramEig(m, n) {
+  const a = Math.sqrt(m - 0.5), b = Math.sqrt(n - 0.5);
+  const mu = (a + b) * (a + b);
+  const sigma = Math.sqrt(mu) * Math.cbrt(1 / a + 1 / b);
+  return Math.max(0, mu + TW1_MEAN * sigma);
+}
+
+/**
+ * Finite-size RMT prediction of the top GN eigenvalue at initialization. Same
+ * structure as gnSharpnessRMT (λ = v1·top(W1) + v2·top(W2)), but each factor's
+ * top contribution is the EXPECTED top Gram eigenvalue under the Tracy–Widom
+ * edge correction rather than the hard MP edge. Because entries scale by √v, the
+ * Gram eigenvalues scale by v, so v pulls out front and the per-factor edge is
+ * computed in unit-variance units. This stays purely predictive (it uses only
+ * the dimensions and variances, never the realized matrix), while correcting the
+ * systematic overestimate of the large-limit bound.
+ *
+ * @param {number} d   input dimension  (W1 is h×d)
+ * @param {number} h   hidden width      (W1 is h×d, W2 is o×h)
+ * @param {number} o   output dimension  (W2 is o×h)
+ * @param {number} v1  per-element variance of W1 entries
+ * @param {number} v2  per-element variance of W2 entries
+ * @returns {number}   finite-corrected top GN eigenvalue (NaN if inputs invalid)
+ */
+export function gnSharpnessRMTFinite(d, h, o, v1, v2) {
+  if (![d, h, o, v1, v2].every(x => typeof x === 'number' && isFinite(x))) return NaN;
+  if (d <= 0 || h <= 0 || o <= 0 || v1 < 0 || v2 < 0) return NaN;
+  const top1 = v1 * expectedTopGramEig(h, d);   // top eig of W1ᵀW1
+  const top2 = v2 * expectedTopGramEig(o, h);   // top eig of W2ᵀW2
+  return top1 + top2;
+}
+
+/**
  * Full-Hessian (GN + residual) eigenvalues, grouped. Stateless.
  * STRICTLY L = 2 — the residual closed form is 2-layer-specific. Callers must
  * not invoke this for L ≠ 2 (the plotting layer gates on depth).

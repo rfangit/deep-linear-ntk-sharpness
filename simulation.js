@@ -117,7 +117,7 @@ export class Simulation {
     // Set minLossPatienceSteps to 0 (or negative) to disable.
     this.convergenceLossThreshold = options.convergenceLossThreshold !== undefined
       ? options.convergenceLossThreshold
-      : 0.001;  // 0.1x the previous 0.01 — train further before auto-stopping
+      : 0.0005;  // halved from 0.001 — train further before auto-stopping
     this.convergenceCooldownSteps = options.convergenceCooldownSteps !== undefined
       ? options.convergenceCooldownSteps
       : 200;    // kept for the onAutoStop message in train_widget.js
@@ -368,18 +368,18 @@ export class Simulation {
   }
 
   /**
-   * Exact full-Hessian eigenvalues via dense diagonalization. Returns the top-k
-   * eigenvalues ascending (same shape/convention as computeHessianEigenvalues),
-   * where k matches the Lanczos tracked count so the overlay aligns. Returns
-   * null if exact diagonalization isn't active for this run.
+   * Exact full-Hessian eigenvalues via dense diagonalization. Returns the
+   * COMPLETE ascending spectrum (all P eigenvalues) so the display layer can plot
+   * any number of them up to P; the Lanczos overlay still picks its own top-k
+   * from this. Returns null if exact diagonalization isn't active for this run.
    */
   computeExactEigenvalues() {
     if (!this.exactDiagActive || !this.trainer || !this.dataset) return null;
-    const { eigenvalues } = denseTopEigenvalues(
+    const { allEigenvalues } = denseTopEigenvalues(
       this.trainer, this.dataset.x, this.dataYArrays,
       { kEigs: this.hessianOptions.kEigs, epsilon: this.exactDiagEpsilon }
     );
-    return eigenvalues;
+    return allEigenvalues;
   }
 
   /**

@@ -129,7 +129,13 @@ export function symmetricEigenvalues(A, opts = {}) {
  * same shape lanczosTopEigenvalues returns, so the two are drop-in comparable.
  * Returns ALL eigenvalues if k >= P.
  *
- * @returns {{ eigenvalues: number[], P: number }}
+ * Also returns the COMPLETE ascending spectrum (`allEigenvalues`, length P) at
+ * no extra cost — symmetricEigenvalues computes the whole spectrum regardless,
+ * so callers that want every exact eigenvalue (e.g. to plot all P) can take this
+ * instead of the truncated top-k. `eigenvalues` stays the top-k slice for the
+ * existing Lanczos-aligned overlay.
+ *
+ * @returns {{ eigenvalues: number[], allEigenvalues: number[], P: number }}
  */
 export function denseTopEigenvalues(trainer, dataX, dataYArrays, options = {}) {
   const { kEigs = 10, epsilon = 1e-5 } = options;
@@ -140,5 +146,5 @@ export function denseTopEigenvalues(trainer, dataX, dataYArrays, options = {}) {
   // top-k by magnitude? No — match lanczos: it returns the algebraically
   // largest top-k (ascending). Take the last k (largest) ascending.
   const top = all.slice(P - k);
-  return { eigenvalues: top, P };
+  return { eigenvalues: top, allEigenvalues: all, P };
 }
