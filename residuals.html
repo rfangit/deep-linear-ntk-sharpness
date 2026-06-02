@@ -100,11 +100,11 @@
 
 <div class="container">
 
-  <h1 class="page-title" style="margin-bottom: 0.3em;">Full Hessian Spectrum of a Two-Layer Linear Network</h1>
+  <h1 class="page-title" style="margin-bottom: 0.3em;">Two-Layer Linear Network - Full Hessian Spectrum</h1>
 
   <div class="tutorial-content">
 
-    <p>In this post, we will derive the full Hessian eigenvalues of a 2 layer linear network (with the analytic solution for small initialization). This extends from our previous work where we analyzed the Gauss-Newton (GN) Hessian eigenvalues of a deep linear network. Although many works tend to ignore the effects of residuals, our results show they have several interesting effects for 2 layer networks.</p>
+    <p>In this post, we will derive the full Hessian eigenvalues of a 2 layer linear network (with the analytic solution for small initialization). This extends from our previous work where we analyzed the Gauss-Newton (GN) Hessian eigenvalues of a deep linear network. Prior analyses have done this as well, but treat the residual term only approximately; here we diagonalize $H = H_{GN} + R$ exactly in closed form for a 2 layer network, and show several interesting effects of the residual.</p>
 
     <p>The GN eigenvalues approximate the full Hessian eigenvalues, with the approximation being exact at the end of training. Last time, we saw the GN accurately predicts end-of-training Hessian eigenvalues, but showed several discrepancies before then. Specifically, experiments with a 2-layer network showed that:</p>
 
@@ -138,7 +138,7 @@
     <ul>
       <li><strong>Aligned modes:</strong> ($k = i, i \leq r$) with eigenvalue $L\, s_i(t)^{2(L-1)/L}$, which are the only modes that carry residual error. There are $r$ such modes.</li>
       <li><strong>Cross modes:</strong> ($k \neq i, i \leq r$), which have zero residual under whitened inputs. There are $r(r - 1)$ such modes.</li>
-      <li><strong>Partial modes:</strong> ($k \neq i$, $i>r$ or $j>r$), modes for which one singular value is nonzero while the other is zero. There are $r (d + n - 2r)$ such modes.</li>
+      <li><strong>Partial modes:</strong> ($k \neq i$, $i>r$ or $k>r$), modes for which one singular value is nonzero while the other is zero. There are $r (d + n - 2r)$ such modes.</li>
       <li><strong>Zero eigenvalue modes:</strong> eigenvectors that lie in the null space of our Jacobian.</li>
     </ul>
 
@@ -234,7 +234,7 @@
 
     $$ H = H_{GN} + R. $$
 
-    <p>Note that every eigenvalue is associated with a pair of singular values $s_i, s_k$ that are learned during training.</p>
+    <p>Note that every eigenvalue is associated with a pair of singular values $s_i, s_k$ that are learned during training. Throughout this analysis, we will assume that $s_{i0} > s_{k0}$.</p>
 
     <figure class="tutorial-figure">
       <img src="imgs/full_hessian.png" alt="Full Hessian Spectrum" style="max-width: 600px;">
@@ -403,7 +403,7 @@
         g_{312} = \begin{pmatrix} o_3\, v_1^\top\\ 0\end{pmatrix}, \quad g_{322} = \begin{pmatrix} o_3\, v_2^\top\\ 0\end{pmatrix},
         $$
 
-        <p>where the end index $2$ denotes that the $dW_2$ block is 0,. The actual eigenvectors are formed from combinations of these vectors (similar to the cross modes, formed by a combination of 4 vectors).</p>
+        <p>where the end index $2$ denotes that the $dW_2$ block is 0. The actual eigenvectors are formed from combinations of these vectors (similar to the cross modes, formed by a combination of 4 vectors).</p>
 
         <p>Suppose we increase the output dimension of our model to 3. Now we have 15 parameters, with a new left singular vector $u_3$ that is associated with a singular value of 0. Our new eigenvectors are the two partial NTK vectors</p>
 
@@ -428,9 +428,9 @@
           </thead>
           <tbody>
             <tr><td>Aligned NTK</td><td>$h_{ii}$</td><td>$r$</td><td>$2s_i$</td><td>$3s_i - s_{i0}$</td></tr>
-            <tr><td>Cross NTK</td><td>$\tilde{h}_{ik}$, both $i, j \le r$</td><td>$r^2 - r$</td><td>$s_i + s_k$</td><td>roots of $G^{ik}$</td></tr>
+            <tr><td>Cross NTK</td><td>$\tilde{h}_{ik}$, both $i, k \le r$</td><td>$r^2 - r$</td><td>$s_i + s_k$</td><td>roots of $G^{ik}$</td></tr>
             <tr><td>Aligned null</td><td>$g_{ii}$</td><td>$r$</td><td>$0$</td><td>$s_{i0} - s_i$</td></tr>
-            <tr><td>Cross null</td><td>$\tilde{g}_{ik}$, both $i, j \le r$</td><td>$r^2 - r$</td><td>$0$</td><td>roots of $G^{ik}$</td></tr>
+            <tr><td>Cross null</td><td>$\tilde{g}_{ik}$, both $i, k \le r$</td><td>$r^2 - r$</td><td>$0$</td><td>roots of $G^{ik}$</td></tr>
           </tbody>
         </table>
         </div>
@@ -446,7 +446,7 @@
 
     <!-- ---------- Residual: 2x2 example ---------- -->
     <details class="accordion">
-      <summary>Residual calculation: a $2\times2$ example</summary>
+      <summary>Residual Calculation: $2\times2$ example</summary>
       <div class="accordion-body">
 
         <p>Before deriving the residual in full generality, we work through a small nontrivial case explicitly. Take $d = n = m = 2$, so that</p>
@@ -537,7 +537,7 @@
 
     <!-- ---------- Residual: arbitrary dimensions ---------- -->
     <details class="accordion">
-      <summary>Residual for arbitrary dimensions</summary>
+      <summary>Residual (general case)</summary>
       <div class="accordion-body">
 
         <p>The general residual term is</p>
@@ -579,7 +579,7 @@
 
     <!-- ---------- GN eigenvectors: 2x2 example ---------- -->
     <details class="accordion">
-      <summary>Gauss–Newton eigenvectors: an explicit $2\times2$ example</summary>
+      <summary>Gauss–Newton Eigenvectors: $2\times2$ example</summary>
       <div class="accordion-body">
 
         <p>Take $d = n = m = 2$, with entries $a_{k\ell} = (W_1)_{k\ell}$ and $b_{jk} = (W_2)_{jk}$. There are 8 parameters, and we use two whitened data points $x_1, x_2$. The network is $f(x) = W_2 W_1 x$, with components $f_j(x_a) = \sum_{k\ell} b_{jk} a_{k\ell} (x_a)_\ell$.</p>
@@ -609,7 +609,7 @@
 
     <!-- ---------- GN eigenvectors: general ---------- -->
     <details class="accordion">
-      <summary>Gauss–Newton eigenvectors (general case)</summary>
+      <summary>Gauss–Newton Eigenvectors (general case)</summary>
       <div class="accordion-body">
 
         <p>We have $nr + dr - r^2$ NTK eigenvectors in $Nn$ space with nonzero eigenvalues, which we transform into eigenvectors in $p$ space by multiplying by $J^\top$. The remaining eigenvectors in $Nn$ space have $0$ eigenvalues and map to zero. Specifically,</p>
@@ -659,7 +659,7 @@
 
     <!-- ---------- Residual on GN eigenvectors ---------- -->
     <details class="accordion">
-      <summary>Residual acting on Gauss–Newton eigenvectors</summary>
+      <summary>Residual on Gauss–Newton Eigenvectors</summary>
       <div class="accordion-body">
 
         <p>To apply $R$ to $h_{ik}$, we first work out how $R$ acts on a general parameter-space vector $\begin{pmatrix} A \\ B \end{pmatrix}$ with $A \in \mathbb{R}^{m \times d}$ and $B \in \mathbb{R}^{n \times m}$. The matrix $A$ has its hidden index as the row; $B$ has its hidden index as the column. Flattening $A$ by stacking rows and $B$ by stacking columns, $I_m \otimes C^\top$ acts on each block independently. Unflattening, the layer-1 output is $B^\top C$ and the layer-2 output is $CA^\top$:</p>
@@ -723,7 +723,7 @@
 
     <!-- ---------- GN null space eigenvectors ---------- -->
     <details class="accordion">
-      <summary>Gauss–Newton null-space eigenvectors</summary>
+      <summary>Gauss–Newton Null-Space Eigenvectors</summary>
       <div class="accordion-body">
 
         <p>So far we have produced $nr + dr - r^2$ eigenvectors $h_{ki}$ by applying the Jacobian to the NTK eigenvectors. However, parameter space has dimension $md + nm$. The remaining eigenvectors must lie in $\ker J$. To find them, we look for parameter perturbations $(\delta W_1, \delta W_2)$ that don't change the function's outputs on our dataset:</p>
@@ -767,7 +767,7 @@
 
     <!-- ---------- Residual on null space ---------- -->
     <details class="accordion">
-      <summary>Residual on null-space eigenvectors, and the cross-mode subspace</summary>
+      <summary>Residual on Null-Space Eigenvectors, and the Cross-Mode Subspace</summary>
       <div class="accordion-body">
 
         <p>We apply the residual to the Jacobian null-space eigenvectors. First, vectors with only $s_i = 0$ or $s_k = 0$. For $s_i = 0$,</p>
@@ -803,11 +803,11 @@
         0 & -\dfrac{\sqrt{s_i s_k}\,\delta}{\sigma} & 0 & -\dfrac{a s_i+b s_k}{\sigma} \\[10pt]
         \dfrac{\sqrt{s_i s_k}\,\delta}{\sigma} & 0 & -\dfrac{a s_i+b s_k}{\sigma} & 0
         \end{pmatrix}
-        }_{M}
+        }_{G^{ik}}
         \begin{pmatrix} h_{ik} \\ h_{ki} \\ g_{ik} \\ g_{ki} \end{pmatrix}.
         $$
 
-        <p>This $M$ is symmetric, as required of a Hessian. The eigenvalues are</p>
+        <p>This $G^{ik}$ is symmetric, as required of a Hessian. The eigenvalues are</p>
 
         $$ \lambda_{1,2} = \frac12 \left[ 2(s_i+s_k) - (s_{i0}+s_{k0}) \pm \sqrt{ 4 s_i s_k + (s_{i0}-s_{k0})^2 }\,\right] $$
 
@@ -832,7 +832,7 @@
 
     <!-- ---------- Eigenvalue analysis ---------- -->
     <details class="accordion">
-      <summary>Eigenvalue analysis: regimes and transitions</summary>
+      <summary>Eigenvalue Analysis: regimes and transitions</summary>
       <div class="accordion-body">
 
         <p><strong>Aligned modes.</strong> The largest eigenvalues occur here: at initialization, the aligned null eigenvalue is $s_{i0}$, and soon the model learns $3s_i - s_{i0}$. These dominate the sharpness except briefly when $s_i$ is learned. The initial sharpness is very high due to the null modes, which have 0 eigenvalue from the GN term — the GN is insufficient for estimating sharpness in this early stage.</p>
@@ -846,7 +846,7 @@
         <p>As the first singular value is learned ($s_k \approx 0, s_i \neq 0$), the matrix becomes</p>
 
         $$
-        M = \begin{pmatrix}
+        G^{ik} = \begin{pmatrix}
         s_{i} & -s_{k0} & 0 & 0 \\
         -s_{k0} & s_{i} & 0 & 0 \\
         0 & 0 & 0 & 0 \\
@@ -859,7 +859,7 @@
         <p>When both singular values are learned, $a = b = \delta = 0$ and</p>
 
         $$
-        M = \begin{pmatrix}
+        G^{ik} = \begin{pmatrix}
         s_{i0} + s_{k0} & 0 & 0 & 0 \\
         0 & s_{i0} + s_{k0} & 0 & 0 \\
         0 & 0 & 0 & 0 \\
