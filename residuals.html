@@ -119,7 +119,7 @@
     <!-- ==================== REVIEW ==================== -->
     <h2>Review</h2>
 
-    <p>We analyze a 2-layer linear network $f(x; \theta) = W_2 W_1 x$, where the input is $x \in \mathbb{R}^d$, the output is $f(x) \in \mathbb{R}^n$, and the hidden layer has width $m$, so that $W_1 \in \mathbb{R}^{m \times d}$ and $W_2 \in \mathbb{R}^{n \times m}$. We assume the true function $M$ has rank $r < d, m, n$ so our network is expressive enough to learn the true function.</p>
+    <p>We analyze a 2-layer linear network $f(x; \theta) = W_2 W_1 x$, where the input is $x \in \mathbb{R}^d$, the output is $f(x) \in \mathbb{R}^n$, and the hidden layer has width $m$, so that $W_1 \in \mathbb{R}^{m \times d}$ and $W_2 \in \mathbb{R}^{n \times m}$. We assume the true function $M$ has rank $r < d, m, n$ (our network is expressive enough to learn the true function).</p>
 
     <h3>NTK Results</h3>
 
@@ -247,11 +247,11 @@
     <p>Aligned eigenvectors have $s_i = s_k$. One of these eigenvalues dominate the sharpness at almost all times except a brief period when the largest eigenvalue is being learned. They contribute two types of eigenvalues:</p>
 
     <ul>
-      <li>$s_{i0} - s_i$ from one of the null modes. At initialization $s_{i0} - s_i \approx s_{i0}$. Thus one of the null modes is initially the largest eigenvalue. As the singular value is learned, this eigenvalue monotonically decreases to 0.</li>
+      <li>$s_{i0} - s_i$ from one of the null modes. At initialization $s_{i0} - s_i \approx s_{i0}$, so one null mode is the largest initial eigenvalue. As the singular value is learned, this eigenvalue monotonically decreases to 0.</li>
       <li>$3s_i - s_{i0}$ from the aligned NTK modes, which dominates after the related singular value is learned, as it reaches a value $2 s_{i0}$. These eigenvalues are initially negative.</li>
     </ul>
 
-    <p>These eigenvectors happen to be eigenvectors of both the GN term and the residual. Compared to the GN term alone, the residual causes eigenvectors with 0 eigenvalue to have large initial positive values, and causes eigenvectors that would normally dominate sharpness to have negative eigenvalues.</p>
+    <p>The residual thus causes eigenvectors with 0 GN eigenvalue to have large initial positive values, and causes eigenvectors that would normally dominate sharpness to have negative eigenvalues.</p>
 
     <figure class="tutorial-figure">
       <img src="imgs/aligned.png" alt="Aligned eigenvectors: the pair h_ii and its null partner g_ii" style="max-width: 600px;">
@@ -261,7 +261,7 @@
     <!-- ---------- Cross eigenvectors ---------- -->
     <h3>Cross Eigenvectors</h3>
 
-    <p>Cross eigenvectors have $i \neq k$, but also $s_{k0}, s_{i0} \neq 0$. These are not generally eigenvectors of the GN term or the residual, but only eigenvectors of the full Hessian. Since our singular values $s_i, s_k$ are learned in a stepwise manner, we can analyze their behavior by looking at the various regimes and their transitions. We assume that $s_i$ is learned before $s_k$, which occurs if $s_{i0} > s_{k0}$ and the model starts out with similar singular values in both matrices.</p>
+    <p>Cross eigenvectors have $i \neq k$, but also $s_{k0}, s_{i0} \neq 0$. These are not generally eigenvectors of the GN term or the residual, but only eigenvectors of the full Hessian. We analyze their behaviour assuming $s_i$ is learned before $s_k$, which occurs if $s_{i0} > s_{k0}$ and the model starts out with similar singular values in both matrices.</p>
 
     <p>Initially, cross eigenvectors take on the following eigenvalues:</p>
 
@@ -279,9 +279,9 @@
 
     $$ \lambda_3 = s_{i0} + s_{k0}, \qquad \lambda_4 = 0. $$
 
-    <p>Interestingly, even though $s_k$ has not been learned, $\lambda_3$ directly assumes the value it would have at the end of training, $s_{i0} + s_{k0}$. This is a notable effect from our residual. Meanwhile the other eigenvalue assumes a value strictly smaller than that predicted by the GN.</p>
+    <p>Interestingly, even though $s_k$ has not been learned, $\lambda_3$ directly assumes the value it would have at the end of training, $s_{i0} + s_{k0}$. This is a notable effect from our residual. Meanwhile the $\lambda_1$ assumes a value smaller than that predicted by the GN.</p>
 
-    <p>Then, as $s_k$ is learned, we find that $\lambda_1 = s_{i0} - s_{k0}$ monotonically increases to its final value of $s_{i0} + s_{k0}$. On the other hand, $\lambda_2, \lambda_3$ initially decrease before increasing again, while $\lambda_4$ initially increases before decreasing again. Note that $\lambda_2, \lambda_3, \lambda_4$ already reached their final values as predicted by the GN even without learning $s_k$.</p>
+    <p>Then, as $s_k$ is learned, we find that $\lambda_1 = s_{i0} - s_{k0}$ monotonically increases to its final value of $s_{i0} + s_{k0}$. On the other hand, $\lambda_2, \lambda_3$ decrease briefly before increasing, while $\lambda_4$ briefly increases before decreasing. Note that $\lambda_2, \lambda_3, \lambda_4$ already reached their final values as predicted by the GN even without learning $s_k$.</p>
 
     <p>Note that of the two initially negative eigenvalues, the larger one becomes positive ($\lambda_1$) and the smaller one vanishes ($\lambda_2$); of the two initially positive eigenvalues, the larger one grows further ($\lambda_3$) and the smaller one vanishes ($\lambda_4$).</p>
 
@@ -297,7 +297,7 @@
 
     <p>The partial null modes correspond to cases where the hidden dimension is larger than the true rank of our function.</p>
 
-    <p>Finally, the zero eigenvectors are modes that come from a large hidden dimension, as well as larger-than-necessary output or input dimensions. These always have 0 eigenvalue.</p>
+    <p>The zero eigenvectors are modes that come from a large hidden dimension and a larger-than-necessary output or input dimension. These always have 0 eigenvalue.</p>
 
     <figure class="tutorial-figure">
       <img src="imgs/partial.png" alt="Partial and zero mode eigenvectors" style="max-width: 600px;">
@@ -313,15 +313,13 @@
 
         $$ v = \begin{pmatrix} dW_1 \\ dW_2 \end{pmatrix}. $$
 
-        <p>It turns out all eigenvectors can be expressed as</p>
+        <p>It turns out many eigenvectors can be expressed as</p>
 
         $$ v = \begin{pmatrix} c_1 o_i \,v_k^\top \\ c_2 u_i \,o_k^\top \end{pmatrix} $$
 
-        <p>for some (possibly zero) coefficients $c_1, c_2$. Specifically, $u_i, o_k, v_j$ all represent different columns from the matrices of the SVD decomposition of the weights $W_1 = U \Sigma O^\top, W_2 = O \Sigma V^\top$. These outer products have the appropriate dimensions. Even the eigenvectors which are not represented by single outer products of pairs of vectors from the SVD basis can be written as a combination of a small number of such pairs.</p>
+        <p>for some (possibly zero) coefficients $c_1, c_2$. Specifically, $u_i, o_k, v_j$ are columns from the matrices of the SVD decomposition of the weights $W_1 = U \Sigma O^\top, W_2 = O \Sigma V^\top$. Our cross and partial eigenvectors do not follow this trend, but instead of being single outer products of pairs of vectors, they are represented by a small combination of such pairs.</p>
 
-        <p>Another way to view these eigenvectors is that each eigenvector is related to one or two singular values $s_i, s_k$. Aligned modes are modes where $s_k = s_i$ (hence the alignment), while cross modes involve different $s_i, s_k$. The single-value and hidden modes are special cases where one of the singular values is 0.</p>
-
-        <p>Aligned eigenvectors then refer to eigenvectors where we choose the pairs of vectors such that they all correspond to one singular value, e.g. $v_1$ maps to $\sqrt{\sigma_1}$ from $\Sigma$, which maps to $o_1^\top$ and then $o_1$, and finally $u_1$ from $U$. Cross-mode eigenvectors refer to pairs that correspond to different singular values, with partial modes being a special case where one singular value doesn't exist.</p>
+        <p>Another way to understand eigenvectors is that each eigenvector is related to one or two singular values $s_i, s_k$. Aligned eigenvectors (with $s_k = s_i$) relate pairs of vectors that correspond to one singular value, e.g. $v_1$ maps to $\sqrt{\sigma_1}$ from $\Sigma$, which maps to $o_1^\top$ and then $o_1$, and finally $u_1$ from $U$. Cross-mode eigenvectors involve pairs of vectors that correspond to different singular values, with partial modes being a special case where one singular value doesn't exist.</p>
 
       </div>
     </details>
@@ -446,10 +444,9 @@
 
     <!-- ---------- Residual: 2x2 example ---------- -->
     <details class="accordion">
-      <summary>Residual Calculation: $2\times2$ example</summary>
+      <summary>Residual Calculation: A 2x2 Example</summary>
       <div class="accordion-body">
-
-        <p>Before deriving the residual in full generality, we work through a small nontrivial case explicitly. Take $d = n = m = 2$, so that</p>
+        <p>Before deriving the residual in full generality, we work through a small nontrivial case explicitly. This will help make concrete some of the objects we discuss in the general case. Take $d = n = m = 2$, so that</p>
 
         $$
         W_1 = \begin{pmatrix} a_{11} & a_{12} \\ a_{21} & a_{22} \end{pmatrix}, \qquad
@@ -460,15 +457,25 @@
 
         <p>The network output is $f(x) = W_2 W_1 x$. Writing it out component by component, the hidden activations are $(W_1 x)_k = \sum_\ell a_{k\ell} x_\ell$, and so</p>
 
-        $$ f_j(x) = \sum_k b_{jk} (W_1 x)_k = \sum_{k, \ell} b_{jk}\, a_{k\ell}\, x_\ell. $$
+        $$
+        f_j(x) = \sum_k b_{jk} (W_1 x)_k = \sum_{k, \ell} b_{jk}\, a_{k\ell}\, x_\ell.
+        $$
 
         <p>For the first output, this is a sum of four terms:</p>
 
-        $$ f_1(x) = b_{11} a_{11} x_1 + b_{11} a_{12} x_2 + b_{12} a_{21} x_1 + b_{12} a_{22} x_2, $$
+        $$
+        f_1(x) = b_{11} a_{11} x_1 + b_{11} a_{12} x_2 + b_{12} a_{21} x_1 + b_{12} a_{22} x_2,
+        $$
 
         <p>and similarly for $f_2$ with $b_{11}, b_{12}$ replaced by $b_{21}, b_{22}$. Every term is a product of one $W_2$ parameter, one $W_1$ parameter, and one input coordinate.</p>
 
-        <p>The residual term of the Hessian is $R = \sum_a r_a \cdot \partial^2 f(x_a)/\partial \theta^2$, so we need the second derivatives of each $f_j$ with respect to pairs of parameters. We note two facts:</p>
+        <p>The residual term of the Hessian is</p>
+        
+        $$
+        R = \sum_a r_a \cdot \partial^2 f(x_a)/\partial \theta^2
+        $$
+
+        <p>so we need the second derivatives of each $f_j$ with respect to pairs of parameters. We note two facts about second derivatives:</p>
 
         <ul>
           <li>Any second derivative taken twice within the same layer vanishes. For instance $\partial^2 f_j / \partial a_{k\ell} \partial a_{k'\ell'} = 0$, since $f_j$ is linear in the $a$'s. Same for the $b$'s.</li>
@@ -484,24 +491,28 @@
         \frac{\partial^2 f_1}{\partial b_{12} \, \partial a_{22}} = x_2,
         $$
 
-        <p>with every other second derivative of $f_1$ equal to zero. $f_1$ does not depend on $b_{21}, b_{22}$ at all, so any derivative involving those vanishes — this is the $\delta_{jj'}$ at work. This generalizes to</p>
+        <p>with every other second derivative of $f_1$ equal to zero. $f_1$ does not depend on $b_{21}, b_{22}$ at all, so any derivative involving those vanishes &mdash; this is the $\delta_{jj'}$ at work. This generalizes to</p>
 
-        $$ \frac{\partial^2 f_j}{\partial (W_2)_{j'k'} \, \partial (W_1)_{k\ell}} = \delta_{jj'}\, \delta_{kk'}\, x_\ell, $$
+        $$
+        \frac{\partial^2 f_j}{\partial (W_2)_{j'k'} \, \partial (W_1)_{k\ell}} = \delta_{jj'}\, \delta_{kk'}\, x_\ell,
+        $$
 
         <p>with $\delta_{jj'}$ enforcing &ldquo;feeds the right output&rdquo; and $\delta_{kk'}$ enforcing &ldquo;shares the hidden unit.&rdquo;</p>
 
-        <p><strong>Contracting with the residual.</strong> Denote the residual on datapoint $a$ as $r_a = (r_a^{(1)}, r_a^{(2)})^\top$. The residual Hessian entry for parameters $b_{j'k'}$ and $a_{k\ell}$ involves summing over the two output dimensions:</p>
+        <p><strong>Contracting with the residual.</strong> The residual term weighs each output's parameter-Hessian by a residual error component and sums over data points. Denote the residual on datapoint $a$ as $r_a = (r_a^{(1)}, r_a^{(2)})^\top$ (with two dimensions, one for each output dimension). The residual Hessian entry for parameters $b_{j'k'}$ and $a_{k\ell}$ involves summing over the two output dimensions:</p>
 
         $$
         \begin{aligned}
         R_{b_{j'k'},\, a_{k\ell}}
         &= \sum_a \sum_j (r_a)_j \, \frac{\partial^2 f_j}{\partial b_{j'k'} \partial a_{k\ell}} \\[4pt]
+        &= \sum_a \left[ (r_a)_1 \frac{\partial^2 f_1}{\partial b_{j'k'} \partial a_{k\ell}} + (r_a)_2 \frac{\partial^2 f_2}{\partial b_{j'k'} \partial a_{k\ell}} \right] \\[4pt]
         &= \sum_a \left[ (r_a)_1 \, \delta_{1 j'} \, \delta_{kk'} (x_a)_\ell + (r_a)_2 \, \delta_{2 j'} \, \delta_{kk'} (x_a)_\ell \right] \\[4pt]
+        &= \sum_a (r_a)_{j'} \, \delta_{kk'} \, (x_a)_\ell \\[4pt]
         &= \delta_{kk'} \underbrace{\sum_a (r_a)_{j'} (x_a)_\ell}_{C_{j'\ell}}.
         \end{aligned}
         $$
 
-        <p>where the sum over output index $j$ collapsed to $j = j'$. A Kronecker delta $\delta_{kk'}$ remains, which denotes how the $W_1, W_2$ parameters we take derivatives with respect to must actually be connected. We arrange these summations into a matrix:</p>
+        <p>where the sum over output index $j$ collapsed to $j = j'$. A Kronecker delta $\delta_{kk'}$ remains, which denotes how the $W_1, W_2$ parameters we take the derivatives with respect to must actually be connected. We are left with a summation over data points matching residual components with input components. We can arrange these summations into a matrix.</p>
 
         $$
         C = \sum_a r_a x_a^\top, \qquad
@@ -512,9 +523,13 @@
 
         <p><strong>Assembling the full residual.</strong> Because two derivatives with respect to the same layer vanish, the full $8 \times 8$ residual in our parameter ordering must have the block structure</p>
 
-        $$ R = \begin{pmatrix} 0 & B^\top \\ B & 0 \end{pmatrix}, $$
+        $$
+        R = \begin{pmatrix} 0 & B^\top \\ B & 0 \end{pmatrix},
+        $$
 
-        <p>where the diagonal blocks are zero (same-layer derivatives) and the off-diagonal block $B$ collects the mixed $W_2$–$W_1$ derivatives. The entries of $B$ are given by $R_{b_{j'k'},\, a_{k\ell}} = \delta_{kk'}\, C_{j'\ell}$. For our ordering, with rows of $B$ given by $W_1$ parameters $(a_{11}, a_{12}, a_{21}, a_{22})$ and columns from $W_2$ in the order $(b_{11}, b_{21}, b_{12}, b_{22})$,</p>
+        <p>where the diagonal blocks are zero (same-layer derivatives) and the off-diagonal block $B$ collects the mixed $W_2$&ndash;$W_1$ derivatives we just computed.</p>
+
+        <p>The entries of $B$ are given by our formula $R_{b_{j'k'},\, a_{k\ell}} = \delta_{kk'}\, C_{j'\ell}$. The factor $\delta_{kk'}$ says an entry is nonzero only when the $W_2$ parameter and the $W_1$ parameter share a hidden unit ($k = k'$); when they do, the value is just $C_{j'\ell}$. For our ordering, we have the rows of $B$ given by $W_1$ parameters $(a_{11}, a_{12}, a_{21}, a_{22})$ with columns from $W_2$ in the order $(b_{11}, b_{21}, b_{12}, b_{22})$. This gives</p>
 
         $$
         B = \begin{pmatrix}
@@ -526,275 +541,488 @@
         = I_2 \otimes C^\top.
         $$
 
-        <p>The two diagonal blocks are both copies of $C^\top$: the top-left block couples the parameters of hidden unit $1$, the bottom-right block couples those of hidden unit $2$. The off-diagonal zeros correspond to derivatives which are zero, because the parameters are not connected. The full residual can be written in Kronecker form:</p>
+        <p>The two diagonal blocks are both copies of $C^\top$: the top-left block couples the parameters of hidden unit $1$ ($a_{11}, a_{12}$ with $b_{11}, b_{21}$), the bottom-right block couples those of hidden unit $2$. The off diagonal zeros correspond to derivatives which are zero, because the parameters are not connected (a weight that takes output of hidden unit $2$ doesn't connect to a weight that feeds hidden unit $1$).</p>
 
-        $$ R = \begin{pmatrix} 0 & I_2 \otimes C \\ I_2 \otimes C^\top & 0 \end{pmatrix}. $$
+        <p>The two blocks are identical because the two hidden units have identical roles. The full residual can then be written in a Kronecker form:</p>
+
+        $$
+        R = \begin{pmatrix} 0 & I_2 \otimes C \\ I_2 \otimes C^\top & 0 \end{pmatrix}.
+        $$
 
         <p>$C$ can be simplified with the whitening assumption.</p>
 
+        <p>Having seen the basic idea with a concrete example, we move to deriving the general residual for a 2 layer network of arbitrary dimensions.</p>
       </div>
     </details>
 
     <!-- ---------- Residual: arbitrary dimensions ---------- -->
     <details class="accordion">
-      <summary>Residual (general case)</summary>
+      <summary>General Residual Term</summary>
       <div class="accordion-body">
-
         <p>The general residual term is</p>
 
-        $$ R = \sum_a r_a \cdot \frac{\partial^2 f(x_a)}{\partial \theta^2} = \sum_{a, j} (r_a)_j \, \frac{\partial^2 f_j(x_a)}{\partial \theta^2}, $$
+        $$R = \sum_a r_a \cdot \frac{\partial^2 f(x_a)}{\partial \theta^2} = \sum_{a, j} (r_a)_j \, \frac{\partial^2 f_j(x_a)}{\partial \theta^2},$$
 
-        <p>where the dot denotes contraction over the output dimension. For any deep linear network, two derivatives with respect to parameters in the same layer always vanish, so the residual admits a block form. For 2 layers,</p>
+        <p>where the dot denotes contraction over the output dimension. Each output component $f_j$ contributes its own parameter-Hessian, weighted by the corresponding residual component $(r_a)_j$, and we sum over both data points $a$ and output dimensions $j$.</p>
 
-        $$ R = \begin{pmatrix} 0 & B^\top \\ B & 0 \end{pmatrix}. $$
+        <p>For any deep linear network, two derivatives with respect to parameters in the same layer always vanish. The residual must therefore admit a block form where blocks pair parameters from different layers. For 2-layers we have</p>
 
-        <p>From $f_j(x) = \sum_{k, \ell} (W_2)_{jk} (W_1)_{k\ell} x_\ell$, the only nonzero second derivatives are</p>
+        $$R = \begin{pmatrix} 0 & B^\top \\ B & 0 \end{pmatrix}.$$
 
-        $$ \frac{\partial^2 f_j}{\partial (W_2)_{j'k'} \, \partial (W_1)_{k\ell}} = \delta_{jj'} \, \delta_{kk'} \, x_\ell. $$
+        <p>The block structure is symmetric because the order of partial derivatives does not matter, i.e. $\frac{\partial^2 f}{\partial \theta_\alpha \partial \theta_\beta} = \frac{\partial^2 f}{\partial \theta_\beta \partial \theta_\alpha}$. The individual blocks however are not symmetric (for example, if $W_1$ has many more parameters than $W_2$).</p>
 
-        <p>The corresponding entry of $B$ is obtained by summing the second derivative against the residuals:</p>
+        <p>Note the only nonzero second derivatives are</p>
 
-        $$ B_{(W_2)_{j'k'},\, (W_1)_{k\ell}} \;=\; \sum_{a, j} (r_a)_j \, \delta_{jj'} \, \delta_{kk'} \, (x_a)_\ell \;=\; \delta_{kk'} \sum_a (r_a)_{j'} (x_a)_\ell. $$
+        $$\frac{\partial^2 f_j}{\partial (W_2)_{j'k'} \, \partial (W_1)_{k\ell}} = \delta_{jj'} \, \delta_{kk'} \, x_\ell.$$
+
+        <p>So only if the $W_1, W_2$ parameter derivatives are connected (via $\delta_{kk'}$) then the contribution is nonzero. The contribution from the $j$th output dimension is also only nonzero if the $W_2$ parameter contributes to this output (via $\delta_{jj'}$).</p>
+
+        <p>Consider a specific $(W_1)_{k\ell}$ and a specific $(W_2)_{j'k'}$. The corresponding entry of $B$ is obtained by summing over the second derivative with the residuals:</p>
+
+        $$B_{(W_2)_{j'k'},\, (W_1)_{k\ell}} \;=\; \sum_{a, j} (r_a)_j \, \delta_{jj'} \, \delta_{kk'} \, (x_a)_\ell \;=\; \delta_{kk'} \sum_a (r_a)_{j'} (x_a)_\ell.$$
 
         <p>It makes sense to represent the two free indices $j'$ and $\ell$ as a matrix:</p>
 
-        $$ C_{j'\ell} = \sum_a (r_a)_{j'} (x_a)_\ell = \sum_a (r_a x_a^\top)_{j' \ell}, \qquad \implies \quad C = \sum_a r_a x_a^\top. $$
+        $$C_{j'\ell} = \sum_a (r_a)_{j'} (x_a)_\ell = \sum_a (r_a x_a^\top)_{j' \ell}, \qquad \implies \quad C = \sum_a r_a x_a^\top.$$
 
-        <p>So $C_{j\ell}$ measures how systematically input feature $\ell$ predicts error in output $j$ across the dataset. Ordering parameters by their hidden index, $\delta_{kk'}$ makes $B$ block-diagonal in the hidden index, with $m$ identical $n \times d$ blocks each equal to $C^\top$:</p>
+        <p>This is a sum over the dataset, where for each data point $a$ we form the outer product of the residual $r_a$ with the input $x_a$. If $(r_a)_j$ and $(x_a)_\ell$ tend to have the same sign across the dataset, $c_{j\ell}$ is large and positive &mdash; the $\ell$-th input feature correlates with errors in output $j$. If they tend to have opposite signs, $c_{j\ell}$ is large and negative. If they are uncorrelated across the dataset, $c_{j\ell} \approx 0$. So $c_{j\ell}$ measures how systematically input feature $\ell$ predicts error in output $j$ across the dataset.</p>
 
-        $$ B = I_m \otimes C^\top, \qquad R = \begin{pmatrix} 0 & I_m \otimes C \\ I_m \otimes C^\top & 0 \end{pmatrix}. $$
+        <p>Ordering parameters by their hidden index (first $W_1$ parameters grouped by hidden unit $k$, then $W_2$ parameters grouped by hidden unit $k'$), $\delta_{kk'}$ makes $B$ block-diagonal in the hidden index, with $m$ identical $n \times d$ blocks each equal to $C^\top$:</p>
 
-        <p>The Kronecker structure expresses the fact that $R$ acts independently on each hidden unit's slice of parameter space. Under the analytic solution and whitening $\sum_a x_a x_a^\top = I$, the residual is</p>
+        $$B = I_m \otimes C^\top, \qquad R = \begin{pmatrix} 0 & I_m \otimes C \\ I_m \otimes C^\top & 0 \end{pmatrix}.$$
 
-        $$ r_a = f(x_a) - y_a = U(\Sigma(t) - \Sigma_0) V^\top x_a, $$
+        <p>The Kronecker structure expresses the fact that $R$ acts independently on each hidden unit's slice of parameter space.</p>
+
+        <p>Under the analytic solution and whitening $\sum_a x_a x_a^\top = I$, the residual is</p>
+
+        $$r_a = f(x_a) - y_a = U(\Sigma(t) - \Sigma_0) V^\top x_a,$$
 
         <p>so</p>
 
-        $$ C = U (\Sigma(t) - \Sigma_0) V^\top \sum_a x_a x_a^\top = U (\Sigma(t) - \Sigma_0) V^\top. $$
+        $$C = U (\Sigma(t) - \Sigma_0) V^\top \sum_a x_a x_a^\top = U (\Sigma(t) - \Sigma_0) V^\top.$$
 
         <p>$C$ is already in SVD form, with singular vectors inherited from the target matrix and singular values $|s_i(t) - s_{i0}|$.</p>
-
       </div>
     </details>
 
     <!-- ---------- GN eigenvectors: 2x2 example ---------- -->
     <details class="accordion">
-      <summary>Gauss–Newton Eigenvectors: $2\times2$ example</summary>
+      <summary>Deriving the GN Eigenvectors: A 2x2 Example</summary>
       <div class="accordion-body">
+        <p>We explicitly derive the GN eigenvectors. The general case involves several algebraic manipulations, which we make concrete by first going through a small example in detail.</p>
 
-        <p>Take $d = n = m = 2$, with entries $a_{k\ell} = (W_1)_{k\ell}$ and $b_{jk} = (W_2)_{jk}$. There are 8 parameters, and we use two whitened data points $x_1, x_2$. The network is $f(x) = W_2 W_1 x$, with components $f_j(x_a) = \sum_{k\ell} b_{jk} a_{k\ell} (x_a)_\ell$.</p>
+        <p>Take $d = n = m = 2$, so that $W_1$ and $W_2$ are $2 \times 2$ matrices with entries $a_{k\ell} = (W_1)_{k\ell}$ and $b_{jk} = (W_2)_{jk}$. There are 8 parameters, and we use two whitened data points $x_1, x_2$ (where $\sum_a x_a x_a^\top = I$). The network is $f(x) = W_2 W_1 x$. The output dimension $j$ for input $x_a$ is $f_j(x_a) = \sum_{k\ell} b_{jk} a_{k\ell} (x_a)_\ell$.</p>
 
-        <p>We order the Jacobian columns (parameters) as $(a_{11}, a_{12}, a_{21}, a_{22}, b_{11}, b_{21}, b_{12}, b_{22})$, with $W_1$ parameters first. The rows go through all output dimensions of a given data point before the next datapoint: $(f_1 (x_1), f_2 (x_1), f_1 (x_2), f_2 (x_2))$. The NTK eigenvectors are $\mathbf{p}_k \otimes u_i$, flattened into 4-vectors matching the row ordering:</p>
+        <p>We choose to order our Jacobian as follows: Each column represents a parameter, which we take the derivative with respect to. We choose to order them from left to right as $(a_{11}, a_{12}, a_{21}, a_{22}, b_{11}, b_{21}, b_{12}, b_{22})$, with $W_1$ parameters first, then $W_2$ parameters. The rows describe the datapoint and the output dimension: we choose to first go through all the output dimensions of a given data point, before doing the next datapoint. Specifically this order from top to bottom is $(f_1 (x_1), f_2 (x_1), f_1 (x_2), f_2 (x_2))$.</p>
+
+        <p>The Jacobian is</p>
+
+        $$
+        J = \begin{pmatrix}
+        \dfrac{\partial f_1(x_1)}{\partial a_{11}} & \dfrac{\partial f_1(x_1)}{\partial a_{12}} & \dfrac{\partial f_1(x_1)}{\partial a_{21}} & \dfrac{\partial f_1(x_1)}{\partial a_{22}} & \dfrac{\partial f_1(x_1)}{\partial b_{11}} & \dfrac{\partial f_1(x_1)}{\partial b_{21}} & \dfrac{\partial f_1(x_1)}{\partial b_{12}} & \dfrac{\partial f_1(x_1)}{\partial b_{22}} \\[10pt]
+        \dfrac{\partial f_2(x_1)}{\partial a_{11}} & \dfrac{\partial f_2(x_1)}{\partial a_{12}} & \dfrac{\partial f_2(x_1)}{\partial a_{21}} & \dfrac{\partial f_2(x_1)}{\partial a_{22}} & \dfrac{\partial f_2(x_1)}{\partial b_{11}} & \dfrac{\partial f_2(x_1)}{\partial b_{21}} & \dfrac{\partial f_2(x_1)}{\partial b_{12}} & \dfrac{\partial f_2(x_1)}{\partial b_{22}} \\[10pt]
+        \dfrac{\partial f_1(x_2)}{\partial a_{11}} & \dfrac{\partial f_1(x_2)}{\partial a_{12}} & \dfrac{\partial f_1(x_2)}{\partial a_{21}} & \dfrac{\partial f_1(x_2)}{\partial a_{22}} & \dfrac{\partial f_1(x_2)}{\partial b_{11}} & \dfrac{\partial f_1(x_2)}{\partial b_{21}} & \dfrac{\partial f_1(x_2)}{\partial b_{12}} & \dfrac{\partial f_1(x_2)}{\partial b_{22}} \\[10pt]
+        \dfrac{\partial f_2(x_2)}{\partial a_{11}} & \dfrac{\partial f_2(x_2)}{\partial a_{12}} & \dfrac{\partial f_2(x_2)}{\partial a_{21}} & \dfrac{\partial f_2(x_2)}{\partial a_{22}} & \dfrac{\partial f_2(x_2)}{\partial b_{11}} & \dfrac{\partial f_2(x_2)}{\partial b_{21}} & \dfrac{\partial f_2(x_2)}{\partial b_{12}} & \dfrac{\partial f_2(x_2)}{\partial b_{22}}
+        \end{pmatrix}.
+        $$
+
+        <p>The NTK eigenvectors are $\mathbf{p}_k \otimes u_i$, which we flatten into 4-vectors that match the row ordering of $J$:</p>
 
         $$
         \mathbf{p}_k \otimes u_i = \begin{pmatrix} (v_k^\top x_1)(u_i)_1 \\ (v_k^\top x_1)(u_i)_2 \\ (v_k^\top x_2)(u_i)_1 \\ (v_k^\top x_2)(u_i)_2 \end{pmatrix}.
         $$
 
-        <p>The GN eigenvectors are obtained by $J^\top v$, which maps these 4-vectors into 8-vectors in parameter space. Carrying out the matrix-vector product for the $W_1$ block, the $(1,1)$ entry factors into a data-dependent sum and an output-dependent sum:</p>
+        <p>This represents the different output dimensions on the different input data points. The GN eigenvectors are $J^\top v$, which maps these 4-vectors into 8-vectors in parameter space.</p>
+
+        <p>Consider the output vector consisting of $W_1$ parameters. This is given by</p>
+
+        $$
+        \begin{pmatrix} (dW_1)_{11} \\ (dW_1)_{12} \\ (dW_1)_{21} \\ (dW_1)_{22} \end{pmatrix}
+        =
+        \begin{pmatrix}
+        \dfrac{\partial f_1(x_1)}{\partial a_{11}} & \dfrac{\partial f_2(x_1)}{\partial a_{11}} & \dfrac{\partial f_1(x_2)}{\partial a_{11}} & \dfrac{\partial f_2(x_2)}{\partial a_{11}} \\[8pt]
+        \dfrac{\partial f_1(x_1)}{\partial a_{12}} & \dfrac{\partial f_2(x_1)}{\partial a_{12}} & \dfrac{\partial f_1(x_2)}{\partial a_{12}} & \dfrac{\partial f_2(x_2)}{\partial a_{12}} \\[8pt]
+        \dfrac{\partial f_1(x_1)}{\partial a_{21}} & \dfrac{\partial f_2(x_1)}{\partial a_{21}} & \dfrac{\partial f_1(x_2)}{\partial a_{21}} & \dfrac{\partial f_2(x_2)}{\partial a_{21}} \\[8pt]
+        \dfrac{\partial f_1(x_1)}{\partial a_{22}} & \dfrac{\partial f_2(x_1)}{\partial a_{22}} & \dfrac{\partial f_1(x_2)}{\partial a_{22}} & \dfrac{\partial f_2(x_2)}{\partial a_{22}}
+        \end{pmatrix}
+        \begin{pmatrix} (v_k^\top x_1)(u_i)_1 \\ (v_k^\top x_1)(u_i)_2 \\ (v_k^\top x_2)(u_i)_1 \\ (v_k^\top x_2)(u_i)_2 \end{pmatrix}.
+        $$
+
+        <p>We carry out the matrix-vector product, using the fact that a general Jacobian element is $\dfrac{\partial f_j(x_a)}{\partial (W_1)_{k\ell}} = (W_2)_{jk}\,(x_a)_\ell$. This yields</p>
+
+        $$
+        \begin{aligned}
+        (dW_1)_{11} &= (W_2)_{11}(x_1)_1(v_k^\top x_1)(u_i)_1 + (W_2)_{21}(x_1)_1(v_k^\top x_1)(u_i)_2 + (W_2)_{11}(x_2)_1(v_k^\top x_2)(u_i)_1 + (W_2)_{21}(x_2)_1(v_k^\top x_2)(u_i)_2 \\[4pt]
+        (dW_1)_{12} &= (W_2)_{11}(x_1)_2(v_k^\top x_1)(u_i)_1 + (W_2)_{21}(x_1)_2(v_k^\top x_1)(u_i)_2 + (W_2)_{11}(x_2)_2(v_k^\top x_2)(u_i)_1 + (W_2)_{21}(x_2)_2(v_k^\top x_2)(u_i)_2 \\[4pt]
+        (dW_1)_{21} &= (W_2)_{12}(x_1)_1(v_k^\top x_1)(u_i)_1 + (W_2)_{22}(x_1)_1(v_k^\top x_1)(u_i)_2 + (W_2)_{12}(x_2)_1(v_k^\top x_2)(u_i)_1 + (W_2)_{22}(x_2)_1(v_k^\top x_2)(u_i)_2 \\[4pt]
+        (dW_1)_{22} &= (W_2)_{12}(x_1)_2(v_k^\top x_1)(u_i)_1 + (W_2)_{22}(x_1)_2(v_k^\top x_1)(u_i)_2 + (W_2)_{12}(x_2)_2(v_k^\top x_2)(u_i)_1 + (W_2)_{22}(x_2)_2(v_k^\top x_2)(u_i)_2
+        \end{aligned}
+        $$
+
+        <p>These summations simplify. For $(dW_1)_{11}$, note that we can factor into a data dependent sum and an output dependent sum:</p>
 
         $$
         (dW_1)_{11} = \sum_a (v_k^\top x_a)(x_a)_1 \underbrace{\Big[(u_i)_1 (W_2)_{11} + (u_i)_2 (W_2)_{21}\Big]}_{j\text{-sum}}.
         $$
 
-        <p>For the $j$-sum, $(u_i)_1(W_2)_{11} + (u_i)_2(W_2)_{21} = (W_2^\top u_i)_1 = \sqrt{s_i}\,(o_i)_1$, using $W_2^\top u_i = O\Sigma^{1/2}U^\top u_i = \sqrt{s_i}\,o_i$. For the $a$-sum, $\sum_a (v_k^\top x_a)(x_a)_1 = (v_k)_1$ because our inputs are whitened. Thus $(dW_1)_{11} = \sqrt{s_i}\,(o_i)_1 (v_k)_1$, the $(1,1)$ entry of $\sqrt{s_i}\,o_i v_k^\top$. The other entries factor identically, so</p>
+        <p>For the $j$ sum, note</p>
 
-        $$ dW_1 = \sqrt{s_i}\, o_i v_k^\top. $$
+        $$(u_i)_1(W_2)_{11} + (u_i)_2(W_2)_{21} = (W_2^\top u_i)_1 = \sqrt{s_i}\,(o_i)_1$$
 
-        <p>The same calculation for the $W_2$ parameters yields $dW_2 = \sqrt{s_k}\, u_i o_k^\top$. Stacking the two blocks,</p>
+        <p>where we use $W_2^\top u_i = O\Sigma^{1/2}U^\top u_i = \sqrt{s_i}\,o_i$. Note $U^\top u_i$ extracts a specific diagonal element of $\Sigma^{1/2}$ and an eigenvector $o_i$.</p>
 
-        $$ h_{ik} = \begin{pmatrix} \sqrt{s_i}\, o_i v_k^\top \\ \sqrt{s_k}\, u_i o_k^\top \end{pmatrix}. $$
+        <p>For the $a$ sum, we have</p>
 
+        $$\sum_a (v_k^\top x_a)(x_a)_1 = (v_k)_1$$
+
+        <p>because our inputs are whitened. Thus we have</p>
+
+        $$(dW_1)_{11} = \sqrt{s_i}\,(o_i)_1 (v_k)_1$$
+
+        <p>which is the $(1,1)$ entry of $\sqrt{s_i}\,o_i v_k^\top$. The other three entries factor identically, with the $j$-sum producing $(o_i)_{k'}$ and the $a$-sum producing $(v_k)_\ell$. The whole block is therefore the outer product</p>
+
+        $$
+        dW_1 = \sqrt{s_i}\, o_i v_k^\top.
+        $$
+
+        <p>The same calculation for the $W_2$ parameters yields</p>
+
+        $$
+        dW_2 = \sqrt{s_k}\, u_i o_k^\top.
+        $$
+
+        <p>Stacking the two blocks gives the eigenvector as</p>
+
+        $$
+        h_{ik} = \begin{pmatrix} \sqrt{s_i}\, o_i v_k^\top \\ \sqrt{s_k}\, u_i o_k^\top \end{pmatrix}.
+        $$
+
+        <p>Having gone through the explicit calculation for a 2x2 case, we now consider the general case below.</p>
       </div>
     </details>
 
     <!-- ---------- GN eigenvectors: general ---------- -->
     <details class="accordion">
-      <summary>Gauss–Newton Eigenvectors (general case)</summary>
+      <summary>GN Eigenvectors (general case)</summary>
       <div class="accordion-body">
+        <p>We have $nr + dr - r^2$ NTK eigenvectors in $Nn$ space with nonzero eigenvalues, which we transform into eigenvectors in $p$ space by multiplying by $J^\top$. Although there are more than $nr + dr - r^2$ eigenvectors in $Nn$ space, they have $0$ eigenvalues and get mapped to a $0$ vector.</p>
 
-        <p>We have $nr + dr - r^2$ NTK eigenvectors in $Nn$ space with nonzero eigenvalues, which we transform into eigenvectors in $p$ space by multiplying by $J^\top$. The remaining eigenvectors in $Nn$ space have $0$ eigenvalues and map to zero. Specifically,</p>
+        <p>Specifically, $J^\top v$ takes a row of $J$, scales by the matching entry of $v$, and sums. In our case our vector $v$ is denoted by two indices, and thus</p>
 
-        $$ (J^\top v)_\beta = \sum_{a, j} J_{(a,j),\, \beta}\, v_{a, j} = \sum_{a, j} \frac{\partial f_j(x_a)}{\partial \theta_\beta}\, v_{a, j}, $$
+        $$(J^\top v)_\beta = \sum_{a, j} J_{(a,j),\, \beta}\, v_{a, j} = \sum_{a, j} \frac{\partial f_j(x_a)}{\partial \theta_\beta}\, v_{a, j},$$
 
-        <p>which tells us how much the function changes (over all data and output combinations) as parameter $\beta$ is varied. We break the parameter-space eigenvector into $W_1$ and $W_2$ parameters:</p>
+        <p>which tells us how much the function changes (over all data and output combinations) as parameter $\beta$ is varied. Normally this would be a single summation, but because we've stacked data ($a$) and outputs ($j$) together into the vector, we sum over them independently.</p>
 
-        $$ h = \begin{pmatrix} dW_1 \\ dW_2 \end{pmatrix} = \begin{pmatrix} h^{(1)} \\ h^{(2)} \end{pmatrix}, $$
+        <p>Our GN Hessian eigenvectors live in parameter space. As a convention, we'll break this into $W_1$ parameters and $W_2$ parameters:</p>
 
-        <p>where $h^{(1)}$ has shape $m \times d$ and $h^{(2)}$ has shape $n \times m$. Denote $h_{ik} = J^\top(\mathbf{p}_k \otimes u_i)/\sqrt{\lambda}$ with $\lambda = s_k(t) + s_i(t)$. Our weights are $W_1 = O\Sigma^{1/2} V^\top$ and $W_2 = U\Sigma^{1/2} O^\top$, where $O$ is an orthogonal matrix representing a degree of freedom between our two layers. Unlike with the NTK, $O$ appears in the Hessian eigenvectors because they live in parameter space.</p>
+        $$h = \begin{pmatrix} dW_1 \\ dW_2 \end{pmatrix} = \begin{pmatrix} h^{(1)} \\ h^{(2)} \end{pmatrix},$$
+
+        <p>where $h^{(1)}$ has shape $m \times d$ (matching $W_1$) and $h^{(2)}$ has shape $n \times m$ (matching $W_2$). This split aligns the parameter-space representation with the block structure of $R$.</p>
+
+        <p>We're interested in the exact form of the Hessian eigenvectors. Denote $h_{ik} = J^\top(\mathbf{p}_k \otimes u_i)/\sqrt{\lambda}$ as the Gauss-Newton eigenvector ($ik$ are not indices of a matrix, but instead denote our eigenvectors), with $\lambda = s_k(t) + s_i(t)$. We choose $h_{ik}$ and not $h_{ki}$ for a more convenient ordering later.</p>
+
+        <p>Our weights are given by $W_1 = O\Sigma^{1/2} V^\top$ and $W_2 = U\Sigma^{1/2} O^\top$, where $O$ is an orthogonal matrix that represents a degree of freedom between our two layers. Unlike with the NTK, $O$ appears in the Hessian eigenvectors because they live in parameter space where the individual weights matter. Denote $o_i$ as the hidden-space direction corresponding to the $i$-th SVD mode, an equivalent to $u_i, v_i$.</p>
 
         <p>We first consider eigenvectors $\mathbf{p}_k \otimes u_i$ where $k, i \leq r$ and both singular values are nonzero.</p>
 
-        <p><strong>Layer 1.</strong> The layer-1 Jacobian entry is $J^{(1)}_{(a,j),\,(k',\ell)} = \frac{\partial f_j(x_a)}{\partial (W_1)_{k'\ell}} = (W_2)_{jk'}(x_a)_\ell$. Contracting with $\mathbf{p}_k \otimes u_i$:</p>
+        <p><strong>Layer 1.</strong> The layer-1 Jacobian entry for datapoint $a$ on output index $j$ and parameter $(W_1)_{k' l}$ is</p>
 
-        $$ (h_{ik}^{(1)})_{k'\ell} = \frac{1}{\sqrt{\lambda}} \sum_{a, j}(\mathbf{p}_k)_a (u_i)_j (W_2)_{jk'} (x_a)_\ell. $$
+        $$J^{(1)}_{(a,j),\,(k',\ell)} = \frac{\partial f_j(x_a)}{\partial (W_1)_{k'\ell}} = (W_2)_{jk'}(x_a)_\ell$$
 
-        <p>The $j$-sum gives $\sum_j (u_i)_j (W_2)_{jk'} = (W_2^\top u_i)_{k'} = \sqrt{s_i(t)}\, (o_i)_{k'}$, and the $a$-sum gives $\sum_a (v_k^\top x_a)(x_a)_\ell = (v_k)_\ell$. Hence</p>
+        <p>This comes directly from $f = W_2 W_1 x$, noting that a specific $W_1$ weight and output dimension connect with exactly one $W_2$ weight. Contracting with $\mathbf{p}_k \otimes u_i$:</p>
 
-        $$ h_{ik}^{(1)} = \frac{\sqrt{s_i(t)}}{\sqrt{s_k(t) + s_i(t)}}\, o_i  v_k^\top. $$
+        $$(h_{ik}^{(1)})_{k'\ell} = \frac{1}{\sqrt{\lambda}} \sum_{a, j}(\mathbf{p}_k)_a (u_i)_j (W_2)_{jk'} (x_a)_\ell.$$
 
-        <p>A layer-1 perturbation along $h_{ik}^{(1)}$ reads input feature $v_k$ and routes it into hidden direction $o_i$.</p>
+        <p>The $j$-sum gives</p>
 
-        <p><strong>Layer 2.</strong> The layer-2 Jacobian entry is $\partial f_j(x_a)/\partial (W_2)_{j'k'} = \delta_{jj'}(W_1 x_a)_{k'}$. Contracting,</p>
+        $$\sum_j (u_i)_j (W_2)_{jk'} = (W_2^\top u_i)_{k'} = (O\Sigma^{1/2} U^\top u_i)_{k'} = \sqrt{s_i(t)}\, (o_i)_{k'},$$
 
-        $$ (h_{ik}^{(2)})_{j'k'} = \frac{1}{\sqrt{\lambda}}(u_i)_{j'} \sum_a (\mathbf{p}_k)_a (W_1 x_a)_{k'}. $$
+        <p>using $U^\top u_i = e_i$ and $\Sigma^{1/2} e_i = \sqrt{s_i(t)}\, e_i$. The $a$-sum, using whitening, gives</p>
 
-        <p>The $a$-sum gives $\sum_a (v_k^\top x_a)(W_1 x_a)_{k'} = (W_1 v_k)_{k'} = \sqrt{s_k(t)}\, (o_k)_{k'}$. Combining,</p>
+        $$\sum_a (\mathbf{p}_k)_a (x_a)_\ell = \sum_a (v_k^\top x_a)(x_a)_\ell = (v_k)_\ell.$$
 
-        $$ h_{ik}^{(2)} = \frac{\sqrt{s_k(t)}}{\sqrt{s_k(t) + s_i(t)}}\, u_i \,o_k^\top. $$
+        <p>From the individual $k', l$ components we get the full vector:</p>
+
+        $$h_{ik}^{(1)} = \frac{\sqrt{s_i(t)}}{\sqrt{s_k(t) + s_i(t)}}\, o_i  v_k^\top.$$
+
+        <p>This is an outer product of the hidden direction $o_i$ with the input direction $v_k$ &mdash; a layer-1 perturbation along $h_{ik}^{(1)}$ reads input feature $v_k$ and routes it into hidden direction $o_i$.</p>
+
+        <p><strong>Layer 2.</strong> The layer-2 Jacobian entry is $\partial f_j(x_a)/\partial (W_2)_{j'k'} = \delta_{jj'}(W_1 x_a)_{k'}$. Contracting:</p>
+
+        $$(h_{ik}^{(2)})_{j'k'} = \frac{1}{\sqrt{\lambda}}(u_i)_{j'} \sum_a (\mathbf{p}_k)_a (W_1 x_a)_{k'}.$$
+
+        <p>The $a$-sum gives</p>
+
+        $$\sum_a (v_k^\top x_a)(W_1 x_a)_{k'} = (W_1 v_k)_{k'} = \sqrt{s_k(t)}\, (o_k)_{k'},$$
+
+        <p>using $W_1 v_k = O\Sigma^{1/2} V^\top v_k = \sqrt{s_k(t)}\, o_k$. Combining:</p>
+
+        $$h_{ik}^{(2)} = \frac{\sqrt{s_k(t)}}{\sqrt{s_k(t) + s_i(t)}}\, u_i   \,o_k^\top.$$
+
+        <p>Again an outer product, this time of the output direction $u_i$ with the hidden direction $o_k$ &mdash; a layer-2 perturbation along $h_{ik}^{(2)}$ reads hidden activity $o_k$ and routes it into output $u_i$.</p>
 
         <p>The full eigenvector is</p>
 
-        $$ h_{ik} = \frac{1}{\sqrt{s_k+s_i}}\begin{pmatrix} \sqrt{s_i}\, o_i\, v_k^\top \\ \sqrt{s_k}\, u_i\, o_k^\top \end{pmatrix}. $$
+        $$h_{ik} = \frac{1}{\sqrt{s_k+s_i}}\begin{pmatrix} \sqrt{s_i}\, o_i\, v_k^\top \\ \sqrt{s_k}\, u_i\, o_k^\top \end{pmatrix}.$$
 
-        <p>In each part, we see traces of the original NTK eigenvector $\mathbf{p}_k \otimes u_i$, with one half contributing as a scalar coefficient and the other present directly, along with the orthogonal eigenvector.</p>
+        <p>This form makes intuitive sense: each part corresponds to the parameters of a given weight matrix. In each part, we see traces of the original NTK eigenvector $\mathbf{p}_k \otimes u_i$, with one half contributing as a scalar coefficient and the other present directly, along with the orthogonal eigenvector. Note our choice of $ik$ ordering makes it easy to remember $h_{ik}$.</p>
 
-        <p>If instead one of $s_i, s_k = 0$, the resulting eigenvector is</p>
+        <p>The previous analysis assumed both $k, i \leq r$. If this is not true, then one of $s_i, s_k = 0$, and the resulting eigenvector is</p>
 
-        $$ \underbrace{h_{ik1}}_{s_i = 0} = \begin{pmatrix} 0 \\ u_i\, o_k^\top \end{pmatrix}, \quad \underbrace{h_{ik2}}_{s_k = 0} = \begin{pmatrix} o_i\, v_k^\top \\ 0 \end{pmatrix}. $$
+        $$\underbrace{h_{ik1}}_{s_i = 0} = \begin{pmatrix} 0 \\ u_i\, o_k^\top \end{pmatrix}, \quad \underbrace{h_{ik2}}_{s_k = 0} = \begin{pmatrix} o_i\, v_k^\top \\ 0 \end{pmatrix}$$
 
-        <p>These are the single-singular-value mode eigenvectors, where $i, k \leq r$ and either $i < n$ or $k < d$. The additional subscript denotes which layer's weights are 0.</p>
-
+        <p>These are the single singular value mode eigenvectors, where $i, k \leq r$ and either $i < n$ or $k < d$. A note on our notation: now $ik$ does not uniquely define the eigenvector of interest (since it could either be the layer 1 weights or layer 2 weights), so we add an additional subscript that denotes which layers weights are 0.</p>
       </div>
     </details>
 
     <!-- ---------- Residual on GN eigenvectors ---------- -->
     <details class="accordion">
-      <summary>Residual on Gauss–Newton Eigenvectors</summary>
+      <summary>Residual On GN Eigenvectors</summary>
       <div class="accordion-body">
+        <p>To apply $R$ to $h_{ki}$, we first work out how $R$ acts on a general parameter-space vector. Our eigenvector is in the form</p>
 
-        <p>To apply $R$ to $h_{ik}$, we first work out how $R$ acts on a general parameter-space vector $\begin{pmatrix} A \\ B \end{pmatrix}$ with $A \in \mathbb{R}^{m \times d}$ and $B \in \mathbb{R}^{n \times m}$. The matrix $A$ has its hidden index as the row; $B$ has its hidden index as the column. Flattening $A$ by stacking rows and $B$ by stacking columns, $I_m \otimes C^\top$ acts on each block independently. Unflattening, the layer-1 output is $B^\top C$ and the layer-2 output is $CA^\top$:</p>
+        $$\begin{pmatrix} A \\ B \end{pmatrix}, \qquad A \in \mathbb{R}^{m \times d}, \quad B \in \mathbb{R}^{n \times m},$$
 
-        $$ R \begin{pmatrix} A \\ B \end{pmatrix} = \begin{pmatrix} B^\top C \\ C A^\top \end{pmatrix}. $$
+        <p>where $A$ has the shape of $W_1$ and $B$ has the shape of $W_2$.</p>
 
-        <p>The residual swaps the layer-1 and layer-2 components, and $C$ ensures the dimensions fit. For aligned and cross modes (both $i, k \leq r$), the layer-1 output is</p>
+        <p>Note that $A$ and $B$ have their hidden index in different positions. The matrix $A$ (shape $m \times d$) has its hidden index as the row (the $k$-th row of $A$ feeds into hidden unit $k$). The matrix $B$ (shape $n \times m$) has its hidden index as the column (the $k$-th column of $B$ reads from hidden unit $k$). When we flatten to match the form of $R$, $A$ is flattened by stacking rows while $B$ is flattened by stacking columns.</p>
 
-        $$ (h_{ik}^{(2)})^\top C = \frac{\sqrt{s_k}}{\sqrt{s_k+s_i}}\, o_k\, u_i^\top C = \frac{\sqrt{s_k}\,(s_i - s_{i0})}{\sqrt{s_k+s_i}}\, o_k\, v_i^\top, $$
+        $$\text{vec}(A) = \begin{pmatrix} a_1 \\ \vdots \\ a_m \end{pmatrix}, \qquad \text{vec}(B) = \begin{pmatrix} b^{(1)} \\ \vdots \\ b^{(m)} \end{pmatrix},$$
 
-        <p>since $u_i^\top C = (s_i - s_{i0})\, v_i^\top$ — only the $i$-th term in $C = \sum_j (s_j - s_{j0}) u_j v_j^\top$ survives. The layer-2 output is</p>
+        <p>where $a_k \in \mathbb{R}^d$ is the $k$-th row of $A$ and $b^{(k)} \in \mathbb{R}^n$ is the $k$-th column of $B$. Each flattened vector has $m$ blocks indexed by hidden unit, one block per hidden unit, matching the structure $R$ acts on.</p>
 
-        $$ C (h_{ik}^{(1)})^\top = \frac{\sqrt{s_i}}{\sqrt{s_k+s_i}}\, C\, v_k\, o_i^\top = \frac{\sqrt{s_i}\,(s_k - s_{k0})}{\sqrt{s_k+s_i}}\, u_k\, o_i^\top, $$
+        <p>Now $I_m \otimes C^\top$ acts on $\text{vec}(B)$ by multiplying each block independently by $C^\top$:</p>
 
-        <p>using $C v_k = (s_k - s_{k0}) u_k$. So the net effect of the residual is to take the transpose, convert $u, v \rightarrow v, u$, and multiply by the opposite singular-value factor:</p>
+        $$(I_m \otimes C^\top)\, \text{vec}(B) = \begin{pmatrix} C^\top b^{(1)} \\ \vdots \\ C^\top b^{(m)} \end{pmatrix}.$$
+
+        <p>Unflattening this back into a matrix (row-major, since the output lives on the $W_1$ side), the $k$-th row is $C^\top b^{(k)}$, i.e. $(b^{(k)})^\top C$. The matrix whose $k$-th row is $(b^{(k)})^\top C$ &mdash; pulling rows from the columns of $B$ &mdash; is exactly $B^\top C$. So the layer-1 output is $B^\top C$. The symmetric calculation for layer 2 gives $CA^\top$:</p>
+
+        $$R \begin{pmatrix} A \\ B \end{pmatrix} = \begin{pmatrix} B^\top C \\ C A^\top \end{pmatrix}.$$
+
+        <p>The residual swaps the layer-1 and layer-2 components, and $C$ ensures the dimensions fit.</p>
+
+        <p>First, the aligned and cross mode cases (where both $i, k \leq r$). The layer 1 output is</p>
+
+        $$(h_{ik}^{(2)})^\top C = \frac{\sqrt{s_k}}{\sqrt{s_k+s_i}}\, o_k\, u_i^\top C = \frac{\sqrt{s_k}\,(s_i - s_{i0})}{\sqrt{s_k+s_i}}\, o_k\, v_i^\top,$$
+
+        <p>where since $u_i^\top C = (s_i - s_{i0})\, v_i^\top$ &mdash; only the $i$-th term in $C = \sum_j (s_j - s_{j0}) u_j v_j^\top$ survives. The layer-2 output is</p>
+
+        $$C (h_{ik}^{(1)})^\top = \frac{\sqrt{s_i}}{\sqrt{s_k+s_i}}\, C\, v_k\, o_i^\top = \frac{\sqrt{s_i}\,(s_k - s_{k0})}{\sqrt{s_k+s_i}}\, u_k\, o_i^\top,$$
+
+        <p>using $C v_k = (s_k - s_{k0}) u_k$. We see the net effect of the residual is to take the transpose, convert $u, v \rightarrow v, u$, and add a factor with the opposite singular values:</p>
 
         $$
         h_{ik} = \frac{1}{\sqrt{s_k+s_i}} \begin{pmatrix} \sqrt{s_i}\, o_i\, v_k^\top \\ \sqrt{s_k}\, u_i\, o_k^\top \end{pmatrix}, \quad
-        R h_{ik} = \frac{1}{\sqrt{s_k+s_i}}\begin{pmatrix} \sqrt{s_k}\,(s_i - s_{i0})\, o_k\, v_i^\top \\ \sqrt{s_i}\,(s_k - s_{k0})\, u_k\, o_i^\top \end{pmatrix}.
-        $$
+        R h_{ik} = \frac{1}{\sqrt{s_k+s_i}}\begin{pmatrix} \sqrt{s_k}\,(s_i - s_{i0})\, o_k\, v_i^\top \\ \sqrt{s_i}\,(s_k - s_{k0})\, u_k\, o_i^\top \end{pmatrix}.$$
 
-        <p>The directions differ from $h_{ik}$ unless $k = i$.</p>
+        <p>Compared to the original eigenvector: $R h_{ik}$ has layer-1 component in direction $o_k v_i^\top$, but $h_{ik}^{(1)}$ lives in direction $o_i v_k^\top$. The directions differ unless $k = i$.</p>
 
-        <p>For <strong>single-singular-value modes</strong>, $(h_{ik1}^{(2)})^\top C = o_k\, u_i^\top C = 0$ because $u_i^\top C$ extracts $s_i$, but these modes have $s_i = 0$. A similar phenomenon occurs for $s_k = 0$ modes. Thus they are eigenvectors of the residual with eigenvalue 0: $R h_{ik1} = R h_{ik2} = \vec{0}$.</p>
+        <p><strong>Aligned case ($k = i$).</strong> $h_{ii}$ is an eigenvector of $R$, with the full Hessian eigenvalue</p>
 
-        <p><strong>Aligned case ($k = i$).</strong> $h_{ii}$ is an eigenvector of $R$, with full Hessian eigenvalue</p>
-
-        $$ \underbrace{2s_i}_{H_{\text{GN}}} + \underbrace{s_i - s_{i0}}_{R} = 3s_i - s_{i0}, $$
+        $$\underbrace{2s_i}_{H_{\text{GN}}} + \underbrace{s_i - s_{i0}}_{R} = 3s_i - s_{i0},$$
 
         <p>starting negative and reaching the GN value $2 s_{i0}$ at convergence.</p>
 
-        <p><strong>Cross case ($k \neq i$).</strong> Each cross mode consists of a pair $\{h_{ik}, h_{ki}\}$. The residual on a member of the pair <em>almost</em> flips it to the other, but not quite:</p>
+        <p>For <strong>single singular value modes</strong> we have</p>
+
+        $$(\underbrace{h_{ik1}^{(2)}}_{s_i = 0})^\top C = o_k\, u_i^\top C = 0$$
+
+        <p>which is $0$ because $u_i^\top C$ extracts $s_i$, but these modes have $s_i = 0$ (they only have nonzero $s_k$). A similar phenomenon occurs for $s_k = 0$ modes. Thus the single singular value modes are eigenvectors of the residuals, with eigenvalue 0</p>
 
         $$
-        \begin{aligned}
-        Rh_{ik} &= \frac{1}{\sqrt{s_k+s_i}}\begin{pmatrix} \sqrt{s_k}\,(s_i - s_{i0})\, o_k v_i^\top \\ \sqrt{s_i}\,(s_k - s_{k0})\, u_k o_i^\top \end{pmatrix} \\[6pt]
-        &= \frac{(s_i-s_{i0})\,s_k + (s_k-s_{k0})\,s_i}{s_i+s_k}\,h_{ki} + \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k}\,g_{ki},
-        \end{aligned}
+        R h_{ik1} = R h_{ik2} = \vec{0}
         $$
+
+        <p><strong>Cross case ($k \neq i$).</strong> Each cross mode consists of a pair of eigenvectors $\{h_{ik}, h_{ki}\}$. The residual on a member of the pair <strong>almost</strong> flips it to the other eigenvector, but not quite:</p>
+
+        $$\begin{aligned} Rh_{ik} &= \frac{1}{\sqrt{s_k+s_i}}\begin{pmatrix} \sqrt{s_k}\,(s_i - s_{i0})\, o_k v_i^\top \\ \sqrt{s_i}\,(s_k - s_{k0})\, u_k o_i^\top \end{pmatrix} \\[6pt] &= \frac{(s_i-s_{i0})\,s_k + (s_k-s_{k0})\,s_i}{(s_i+s_k)\sqrt{s_i+s_k}}\begin{pmatrix} \sqrt{s_k}\,o_k v_i^\top \\ \sqrt{s_i}\,u_k o_i^\top \end{pmatrix} + \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{(s_i+s_k)\sqrt{s_i+s_k}}\begin{pmatrix} \sqrt{s_i}\,o_k v_i^\top \\ -\sqrt{s_k}\,u_k o_i^\top \end{pmatrix} \\[6pt] &= \frac{(s_i-s_{i0})\,s_k + (s_k-s_{k0})\,s_i}{s_i+s_k}\,h_{ki} + \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k}\,g_{ki}. \end{aligned}$$
 
         <p>where</p>
 
-        $$ g_{ki} = \frac1{\sqrt{s_i+s_k}} \begin{pmatrix} \sqrt{s_i}\,o_k v_i^\top \\ -\sqrt{s_k}\,u_k o_i^\top \end{pmatrix}. $$
+        $$
+        g_{ki} =\frac1{\sqrt{s_i+s_k}}
+        \begin{pmatrix}
+        \sqrt{s_i},o_k v_i^\top \\
+        -\sqrt{s_k},u_k o_i^\top
+        \end{pmatrix}
+        $$
 
-        <p>The coefficients come from solving</p>
+        <p>Our coefficients come from solving</p>
 
         $$
-        \begin{pmatrix} \sqrt{s_k}(s_i-s_{i0})\\ \sqrt{s_i}(s_k-s_{k0}) \end{pmatrix}
-        = \alpha \begin{pmatrix} \sqrt{s_k}\\ \sqrt{s_i} \end{pmatrix}
-        + \beta \begin{pmatrix} \sqrt{s_i}\\ -\sqrt{s_k} \end{pmatrix},
+        \begin{pmatrix}
+        \sqrt{s_k}(s_i-s_{i0})\\
+        \sqrt{s_i}(s_k-s_{k0})
+        \end{pmatrix}
+        =
+        \alpha
+        \begin{pmatrix}
+        \sqrt{s_k}\\
+        \sqrt{s_i}
+        \end{pmatrix}
+        +\beta
+        \begin{pmatrix}
+        \sqrt{s_i}\\
+        -\sqrt{s_k}
+        \end{pmatrix}
         $$
 
         <p>which yields</p>
 
-        $$ \alpha = \frac{(s_i-s_{i0})s_k+(s_k-s_{k0})s_i}{s_i+s_k}, \qquad \beta = \frac{\sqrt{s_i s_k}\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k}. $$
+        $$
+        \alpha =\frac{(s_i-s_{i0})s_k+(s_k-s_{k0})s_i}{s_i+s_k},
+        $$
 
-        <p>Interestingly, $R h_{ik}$ produces a component outside the image of $J^\top$ — this is why we chose this particular decomposition with $g_{ik}$, as we see next.</p>
+        $$
+        \beta=\frac{\sqrt{s_i s_k}\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k},
+        $$
 
+        <p>Interestingly, $R h_{ik}$ produces a component outside the image of $J^\top$. We will see this fact, and why we chose this particular decomposition with $g_{ik}$ in the next section.</p>
       </div>
     </details>
 
     <!-- ---------- GN null space eigenvectors ---------- -->
     <details class="accordion">
-      <summary>Gauss–Newton Null-Space Eigenvectors</summary>
+      <summary>Gauss-Newton Null Space Eigenvectors</summary>
       <div class="accordion-body">
+        <p>Our analysis so far has produced $nr + dr - r^2$ eigenvectors $h_{ki}$ by applying the Jacobian to the NTK eigenvectors. However, parameter space has dimension $md + nm$.</p>
 
-        <p>So far we have produced $nr + dr - r^2$ eigenvectors $h_{ki}$ by applying the Jacobian to the NTK eigenvectors. However, parameter space has dimension $md + nm$. The remaining eigenvectors must lie in $\ker J$. To find them, we look for parameter perturbations $(\delta W_1, \delta W_2)$ that don't change the function's outputs on our dataset:</p>
+        <p>The remaining eigenvectors must lie in $\ker J$, since the $h_{ki}$ span $\text{range}(J^\top)$ completely (the rank of $JJ^\top$ equals the rank of $J$). To find vectors in $\ker J$, we look for parameter perturbations $(\delta W_1, \delta W_2)$ that don't change the functions outputs on our dataset</p>
 
-        $$ \delta f(x) = (\delta W_2 W_1 + W_2 \delta W_1)\, x = 0. $$
+        $$\delta f(x) = (\delta W_2 W_1 + W_2 \delta W_1)\, x = 0$$
 
-        <p>For this to vanish on whitened data, we need $\delta W_2 W_1 + W_2 \delta W_1 = 0$. In the SVD basis, with $\delta W_1 = O A V^\top$ and $\delta W_2 = U B O^\top$, this becomes</p>
+        <p>For this to vanish on whitened data (which spans all directions), we need</p>
 
-        $$ \Sigma^{1/2} A + B \Sigma^{1/2} = 0. $$
+        $$\delta W_2 W_1 + W_2 \delta W_1 = 0.$$
 
-        <p>This equation is linear, so the solution set $(A, B) \in \ker J$ is a linear subspace. Inspecting element $(k, i)$:</p>
+        <p>Analyzing this is easiest in the SVD basis, with $\delta W_1 = O A V^\top$ and $\delta W_2 = U B O^\top$. Note that $A \in \mathbb{R}^{m \times d}$ and $B \in \mathbb{R}^{n \times m}$ are not necessarily diagonal matrices in this basis, and together still have $md + nm$ unspecified parameters. In this basis, we have</p>
 
-        $$ (\Sigma^{1/2} A + B \Sigma^{1/2})_{ki} = \sqrt{s_k}\, A_{ki} + B_{ki}\, \sqrt{s_i} = 0. $$
+        $$\Sigma^{1/2} A + B \Sigma^{1/2} = 0.$$
 
-        <p>These equations don't couple different $(k, i)$ pairs. We find three families of basis vectors.</p>
+        <p>This equation is linear in unknowns, so if $(A_1, B_1)$ and $(A_2, B_2)$ are solutions, then so is any linear combination. The set of solutions $(A, B) \in \ker J$ is a linear subspace of $\mathbb{R}^{m \times d} \times \mathbb{R}^{n \times m}$. We will find a basis of this subspace.</p>
 
-        <p><strong>&ldquo;Coupled&rdquo; basis vectors (both $s_k \neq 0$ and $s_i \neq 0$).</strong> When both $k \in [r]$ and $i \in [r]$, the constraint $\sqrt{s_k} A_{ki} + \sqrt{s_i} B_{ki} = 0$ has one free parameter. Picking $A_{ki} = \sqrt{s_i}$ and $B_{ki} = -\sqrt{s_k}$, there are $r^2$ such eigenvectors:</p>
+        <p>Inspecting element $(k, i)$ of this matrix equation yields</p>
 
-        $$ g_{ki} = \begin{pmatrix} O A V^\top \\ U B O^\top \end{pmatrix} = \frac{1}{\sqrt{s_i + s_k}} \begin{pmatrix} \sqrt{s_i}\, o_k\, v_i^\top \\ -\sqrt{s_k}\, u_k\, o_i^\top \end{pmatrix}. $$
+        $$(\Sigma^{1/2} A + B \Sigma^{1/2})_{ki} = \sum_j (\Sigma^{1/2})_{kj} A_{ji} + \sum_j B_{kj} (\Sigma^{1/2})_{ji} = \sqrt{s_k}\, A_{ki} + B_{ki}\, \sqrt{s_i} = 0,$$
 
-        <p><strong>&ldquo;$A$-only&rdquo; basis vectors ($s_k = 0$).</strong> When $s_k = 0$ ($k > r$), the equation reduces to $\sqrt{s_i} B_{ki} = 0$, and $A_{ki}$ becomes free. For every $(k, i)$ with $k \in \{r+1, \ldots, m\}$ and $i \in [d]$, set $A_{ki} = 1$. There are $(m - r) d$ such vectors:</p>
+        <p>These equations don't couple different $(k, i)$ pairs and can be solved in isolation to collect one or more basis vectors from each entry $(k, i)$. Note that $A_{ki}$ exists for $k \in [m], i \in [d]$, and $B_{ki}$ exists for $k \in [n], i \in [m]$. So for a given $(k, i)$ pair, sometimes only one of $A_{ki}, B_{ki}$ is defined, sometimes both.</p>
 
-        $$ \underbrace{g_{ki2}}_{B_{ki} = 0} = \begin{pmatrix} o_k\, v_i^\top \\ 0 \end{pmatrix}. $$
+        <p>We find three families of basis vectors.</p>
 
-        <p>This breaks further into $(m - r)r$ used directions ($i \leq r$, partial modes) and $(m - r)(d - r)$ idle directions ($i > r$, zero modes).</p>
+        <p><strong>&ldquo;Coupled&rdquo; basis vectors (both $s_k \neq 0$ and $s_i \neq 0$)</strong></p>
 
-        <p><strong>&ldquo;$B$-only&rdquo; basis vectors ($s_i = 0$).</strong> When $s_i = 0$ ($i > r$), the equation reduces to $\sqrt{s_k} A_{ki} = 0$, and $B_{ki}$ becomes free. For every $(k, i)$ with $k \in [n]$ and $i \in \{r+1, \ldots, m\}$, set $B_{ki} = 1$. There are $(m - r) n$ such vectors:</p>
+        <p>When both $k \in [r]$ and $i \in [r]$ (both indices in the nonzero singular value range), we get constraint</p>
 
-        $$ \underbrace{g_{ki1}}_{A_{ki} = 0} = \begin{pmatrix} 0 \\ u_k\, o_i^\top \end{pmatrix}. $$
+        $$\sqrt{s_k} A_{ki} + \sqrt{s_i} B_{ki} = 0$$
 
-        <p>This breaks into $(m - r)r$ partial null modes and $(m - r)(n - r)$ zero modes.</p>
+        <p>which has one free parameter. For each such $(k, i)$, we build basis vectors by picking $A_{ki} = \sqrt{s_i}$ and $B_{ki} = -\sqrt{s_k}$ (so it satisfies the equation), everything else zero. There are $r^2$ such eigenvectors of the form. Let $g_{ki}$ correspond to $(A_{ki} = \sqrt{s_i}, B_{ki} = -\sqrt{s_k})$, then</p>
 
-        <p><strong>Total count.</strong> Cases where $s_i = s_k = 0$ are accounted for once for $s_i = 0$ and once for $s_k = 0$. We have $nr + dr - r^2$ eigenvectors from the NTK, and the null space contributes $r^2 + md - dr + nm - nr$. The total is</p>
+        $$g_{ki} = \begin{pmatrix} \delta W_1 \\ \delta W_2 \end{pmatrix} = \begin{pmatrix} O A V^\top \\ U B O^\top \end{pmatrix} = \frac{1}{\sqrt{s_i + s_k}} \begin{pmatrix} \sqrt{s_i}\, o_k\, v_i^\top \\ -\sqrt{s_k}\, u_k\, o_i^\top \end{pmatrix}$$
 
-        $$ nr + dr - r^2 + r^2 + md - dr + nm - nr = nm + md, $$
+        <p><strong>&ldquo;$A$-only&rdquo; basis vectors ($s_k = 0$)</strong></p>
+
+        <p>When $s_k = 0$ ($k > r$), the equation reduces to</p>
+
+        $$\sqrt{s_i} B_{ki} = 0$$
+
+        <p>and the coefficient on $A_{ki}$ vanishes, so $A_{ki}$ becomes a free parameter. For every $(k, i)$ with $k \in \{r+1, \ldots, m\}$ and $i \in [d]$, we set $A_{ki} = 1$ and everything else zero. There are $(m - r) d$ such vectors.</p>
+
+        $$\underbrace{g_{ki2}}_{B_{ki} = 0} = \begin{pmatrix} o_k\, v_i^\top \\ 0 \end{pmatrix}$$
+
+        <p>This is similar to our earlier NTK eigenvector but the indices $i, k$ are flipped (representing a connection to the null singular value instead). Again, the additional index denotes that the layer $2$ weights are 0.</p>
+
+        <p>We can actually break this class of eigenvectors even further. Although we have $k > r$, we allow for $i \in [d]$, which covers both $i \leq r$ (directions actually used, corresponding to partial modes) and $i > r$ (zero modes). We have $(m - r)r$ used directions, and $(m - r)(d - r)$ idle directions.</p>
+
+        <p><strong>&ldquo;$B$-only&rdquo; basis vectors ($s_i = 0$)</strong></p>
+
+        <p>When $s_i = 0$ ($i > r$), the equation reduces to</p>
+
+        $$\sqrt{s_k} A_{ki} = 0$$
+
+        <p>and $B_{ki}$ becomes a free parameter. For every $(k, i)$ with $k \in [n]$ and $i \in \{r+1, \ldots, m\}$, build a basis vector by setting $B_{ki} = 1$ and everything else zero. There are $(m - r) n$ such vectors.</p>
+
+        $$\underbrace{g_{ki1}}_{A_{ki} = 0} = \begin{pmatrix} 0 \\ u_k\, o_i^\top \end{pmatrix}$$
+
+        <p>Similar to the previous family, this can be broken into $(m - r)r$ partial null modes, and $(m - r)(n - r)$ zero modes.</p>
+
+        <p><strong>Total Number of Eigenvectors</strong></p>
+
+        <p>Note that technically, cases exist where $s_i = s_k = 0$. These allow for both free parameters, and contribute two eigenvectors. However, this has been automatically accounted for by counting it once for $s_i = 0$ and once for $s_k = 0$.</p>
+
+        <p>We now have all the eigenvectors of parameter space $p$. Specifically, we have $nr + dr - r^2$ eigenvectors from the NTK, and our null space has $r^2 + md - dr + nm - nr = $. The total number of eigenvectors is thus</p>
+
+        $$nr + dr - r^2 + r^2 + md - dr + nm - nr = nm + md$$
 
         <p>as required.</p>
-
       </div>
     </details>
 
     <!-- ---------- Residual on null space ---------- -->
     <details class="accordion">
-      <summary>Residual on Null-Space Eigenvectors, and the Cross-Mode Subspace</summary>
+      <summary>Residual on Null Space Gauss-Newton Eigenvectors</summary>
       <div class="accordion-body">
+        <p>We apply our residual onto the Jacobian null space eigenvectors.</p>
 
-        <p>We apply the residual to the Jacobian null-space eigenvectors. First, vectors with only $s_i = 0$ or $s_k = 0$. For $s_i = 0$,</p>
+        <p>First, we consider vectors with only $s_i = 0$ or $s_k = 0$, from the A/B families earlier. This is a simpler case of what we'll do with our cross modes. For vectors with $s_i = 0$, we apply the residual to</p>
 
-        $$ R g_{ki1} = \begin{pmatrix} o_i\, u_k^\top C \\ 0 \end{pmatrix} = \begin{pmatrix} (s_k - s_{k0}) \,o_i\, v_k^\top \\ 0 \end{pmatrix} = (s_k - s_{k0}) g_{ik2}, $$
+        $$g_{ki1} = \begin{pmatrix} 0 \\ u_k\, o_i^\top \end{pmatrix}$$
 
-        <p>and similarly $R(g_{ik2}) = (s_k - s_{k0}) g_{ki1}$. The residual flips between $g_{ki1}, g_{ik2}$. These two share the same GN eigenvalue, so we diagonalize the $2\times2$ block</p>
+        <p>Which yields</p>
 
-        $$ R\big|_{\text{sub}} = \begin{pmatrix} 0 & s_k - s_{k0} \\ s_k - s_{k0} & 0 \end{pmatrix}, $$
+        $$R g_{ki1} = \begin{pmatrix} (g_{ki1}^{(2)})^\top C \\ C 0^\top \end{pmatrix}
+        = \begin{pmatrix} o_i\, u_k^\top C \\ 0 \end{pmatrix} = \begin{pmatrix} (s_k - s_{k0}) \,o_i\, v_k^\top \\ 0 \end{pmatrix} = (s_k - s_{k0}) g_{ik2}$$
 
-        <p>with eigenvalues $\lambda_\pm = \pm (s_k - s_{k0})$ and eigenvectors $w_\pm = g_{ki1} \pm g_{ik2}$. The non-idle eigenvectors pair up into a subspace of $2(m - r)r$ eigenvectors with eigenvalue $\pm (s_k - s_{k0})$. The zero modes lie in the null space of the residual too and do not pair up — there are $(m - r)(d + n - 2r)$ such vectors.</p>
+        <p>If this is one of the zero modes of the A/B families, then $s_k - s_{k0} = 0$. Thus the zero modes are eigenvectors of the residual with eigenvalue 0. There are $(m - r)(d + n - 2r)$ such vectors.</p>
+          
+        <p>For the partial null modes, we calculate the residual on $g_{ik2}$</p>
 
-        <p>For vectors where $s_k, s_i \neq 0$,</p>
+        $$g_{ik2} = \begin{pmatrix} o_i\, v_k^\top \\ 0 \end{pmatrix} \implies R(g_{ik2}) = \begin{pmatrix} 0 \\ (s_k - s_{k0}) \,u_k\, o_i^\top \end{pmatrix} = (s_k - s_{k0}) g_{ki1}$$
 
-        $$ R g_{ki} = \frac{1}{\sqrt{s_i + s_k}} \begin{pmatrix} -\sqrt{s_k} (s_k - s_{k0})\, o_i\, v_k^\top \\ \sqrt{s_i} (s_i - s_{i0})\, u_i\, o_k^\top \end{pmatrix}. $$
+        <p>Thus our residual flips between $g_{ki1}, g_{ik2}$. These two eigenvectors have the same GN eigenvalue, so we simply need to find a combination that diagonalizes the residual, whose action is given by</p>
 
-        <p>If $k = i$, $R g_{ii}$ is an eigenvector of the residual and thus of the full Hessian, with eigenvalue $s_{i0} - s_i$. If $k \neq i$, the full Hessian $H_{GN} + R$ acts on the subspace $\{h_{ik}, h_{ki}, g_{ik}, g_{ki}\}$ to rotate them into each other, so we diagonalize a small subspace. We have</p>
+        $$R\big|_{\text{sub}} = \begin{pmatrix} 0 & s_k - s_{k0} \\ s_k - s_{k0} & 0 \end{pmatrix}$$
 
-        $$ (H_{GN}+R)\,h_{ik} = (s_i+s_k)\,h_{ik} + \frac{(s_i-s_{i0})\,s_k + (s_k-s_{k0})\,s_i}{s_i+s_k}\,h_{ki} + \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k}\,g_{ki}, $$
+        <p>with eigenvalues</p>
 
-        $$ (H_{GN} + R)\, g_{ki} = \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k}\, h_{ik} \;-\; \frac{(s_i-s_{i0})\,s_i + (s_k-s_{k0})\,s_k}{s_i+s_k}\, g_{ik}, $$
+        $$\lambda_\pm = \pm (s_k - s_{k0})$$
 
-        <p>and the symmetric relations for $h_{ki}, g_{ik}$. Writing $\sigma = s_i + s_k$, $a = s_i - s_{i0}$, $b = s_k - s_{k0}$, $\delta = a - b$, the action of the full Hessian on this subspace is</p>
+        <p>and eigenvectors</p>
 
-        $$
-        (H_{GN}+R)
-        \begin{pmatrix} h_{ik} \\ h_{ki} \\ g_{ik} \\ g_{ki} \end{pmatrix}
+        $$w_\pm = g_{ki1} \pm g_{ik2}$$
+
+        <p>So pairs of partial null modes form a subspace of $2(m - r)r$ eigenvectors with eigenvalues $\pm (s_k - s_{k0})$.</p>
+
+        <p>For vectors where $s_k, s_i \neq 0$, we have</p>
+
+        $$R g_{ki} = \frac{1}{\sqrt{s_i + s_k}} \begin{pmatrix} -\sqrt{s_k} (s_k - s_{k0})\, o_i\, v_k^\top \\ \sqrt{s_i} (s_i - s_{i0})\, u_i\, o_k^\top \end{pmatrix}.$$
+
+        <p>If $k = i$, then $R g_{ii}$ is an eigenvector of residual and thus an eigenvector of the full Hessian, with eigenvalue $s_{i0} - s_i$.</p>
+
+        <p>If $k \neq i$, then the residual maps the null space eigenvector to a vector that does not lie in the space of null space eigenvectors. In fact, the full Hessian $H_{GN} + R$ acts on the subspace of vectors $h_{ik}, h_{ki}, g_{ik}, g_{ki}$ to rotate them into each other. Thus we only need to diagonalize a small subspace to obtain the new eigenvalues and eigenvectors of the full Hessian.</p>
+
+        <p>Earlier, we found that</p>
+
+        $$(H_{GN}+R)\,h_{ik} = (s_i+s_k)\,h_{ik} + \frac{(s_i-s_{i0})\,s_k + (s_k-s_{k0})\,s_i}{s_i+s_k}\,h_{ki} + \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k}\,g_{ki}.$$
+
+        <p>We repeat this for $g_{ki}$</p>
+
+        $$\begin{aligned} (H_{GN} + R)\, g_{ki} &= 0 + \frac{1}{\sqrt{s_i + s_k}} \begin{pmatrix} -\sqrt{s_k}\,(s_k - s_{k0})\, o_i\, v_k^\top \\ \sqrt{s_i}\,(s_i - s_{i0})\, u_i\, o_k^\top \end{pmatrix} \\[6pt] &= \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{(s_i+s_k)\sqrt{s_i+s_k}} \begin{pmatrix}\sqrt{s_i}\,o_i v_k^\top \\ \sqrt{s_k}\,u_i o_k^\top\end{pmatrix} - \frac{(s_i-s_{i0})\,s_i + (s_k-s_{k0})\,s_k}{(s_i+s_k)\sqrt{s_i+s_k}} \begin{pmatrix}\sqrt{s_k}\,o_i v_k^\top \\ -\sqrt{s_i}\,u_i o_k^\top\end{pmatrix} \\[6pt] &= \frac{\sqrt{s_i s_k}\,\big[(s_i-s_{i0})-(s_k-s_{k0})\big]}{s_i+s_k}\, h_{ik} \;-\; \frac{(s_i-s_{i0})\,s_i + (s_k-s_{k0})\,s_k}{s_i+s_k}\, g_{ik}. \end{aligned}$$
+
+        <p>Note that $i, k$ are symmetric, so</p>
+
+        $$(H_{GN} + R)\, h_{ki} = (s_i + s_k)\, h_{ki} + \frac{(s_i-s_{i0})\,s_k + (s_k-s_{k0})\,s_i}{s_i+s_k}\, h_{ik} + \frac{\sqrt{s_i s_k}\,\big[(s_k-s_{k0})-(s_i-s_{i0})\big]}{s_i+s_k}\, g_{ik}.$$
+
+        $$(H_{GN} + R)\, g_{ik} = \frac{\sqrt{s_i s_k}\,\big[(s_k-s_{k0})-(s_i-s_{i0})\big]}{s_i+s_k}\, h_{ki} \;-\; \frac{(s_i-s_{i0})\,s_i + (s_k-s_{k0})\,s_k}{s_i+s_k}\, g_{ki}.$$
+
+        <p>To describe the action of the full Hessian on this subspace, we use $\sigma = s_i + s_k$, $a = s_i - s_{i0}$, $b = s_k - s_{k0}, \delta = a - b$ and obtain</p>
+
+        $$(H_{GN}+R)
+        \begin{pmatrix}
+        h_{ik} \\
+        h_{ki} \\
+        g_{ik} \\
+        g_{ki}
+        \end{pmatrix}
         =
         \underbrace{
         \begin{pmatrix}
@@ -803,98 +1031,185 @@
         0 & -\dfrac{\sqrt{s_i s_k}\,\delta}{\sigma} & 0 & -\dfrac{a s_i+b s_k}{\sigma} \\[10pt]
         \dfrac{\sqrt{s_i s_k}\,\delta}{\sigma} & 0 & -\dfrac{a s_i+b s_k}{\sigma} & 0
         \end{pmatrix}
-        }_{G^{ik}}
-        \begin{pmatrix} h_{ik} \\ h_{ki} \\ g_{ik} \\ g_{ki} \end{pmatrix}.
-        $$
+        }_{M}
+        \begin{pmatrix}
+        h_{ik} \\
+        h_{ki} \\
+        g_{ik} \\
+        g_{ki}
+        \end{pmatrix}.$$
 
-        <p>This $G^{ik}$ is symmetric, as required of a Hessian. The eigenvalues are</p>
+        <p>This $M$ is symmetric, as required of a Hessian. We find the eigenvalues are</p>
 
-        $$ \lambda_{1,2} = \frac12 \left[ 2(s_i+s_k) - (s_{i0}+s_{k0}) \pm \sqrt{ 4 s_i s_k + (s_{i0}-s_{k0})^2 }\,\right] $$
+        $$\lambda_{1,2} = \frac12 \left[ 2(s_i+s_k) - (s_{i0}+s_{k0}) \pm \sqrt{ 4 s_i s_k + (s_{i0}-s_{k0})^2 }\,\right]$$
 
         <p>and</p>
 
-        $$ \lambda_{3,4} = \frac12 \left[ (s_{i0}+s_{k0}) \pm \sqrt{ \bigl(2(s_i-s_k)-(s_{i0}-s_{k0})\bigr)^2 + 4 s_i s_k }\,\right]. $$
+        $$\lambda_{3,4} = \frac12 \left[ (s_{i0}+s_{k0}) \pm \sqrt{ \bigl(2(s_i-s_k)-(s_{i0}-s_{k0})\bigr)^2 + 4 s_i s_k }\,\right].$$
 
-        <p>The eigenvectors are</p>
+        <p>with the eigenvectors given by</p>
 
-        $$ v_{1,2} = \left(1,\;1,\; -\frac{ \lambda_{1,2} - \left[ (s_i+s_k) + \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} }, \; \frac{ \lambda_{1,2} - \left[ (s_i+s_k) + \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} } \right), $$
+        $$v_{1,2} = \left(1,\;1,\; -\frac{ \lambda_{1,2} - \left[ (s_i+s_k) + \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} }, \; \frac{ \lambda_{1,2} - \left[ (s_i+s_k) + \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} } \right),$$
 
-        $$ v_{3,4} = \left( 1,\; -1,\; \frac{ \lambda_{3,4} - \left[ (s_i+s_k) - \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} }, \; \frac{ \lambda_{3,4} - \left[ (s_i+s_k) - \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} } \right). $$
+        <p>and</p>
 
-        <div class="tutorial-note">
-          We numerically verify this solution to our matrix in <a href="https://colab.research.google.com/drive/1X00e1ixf54J5jaZYeSywuTbH0tsS71UT?usp=sharing" target="_blank" rel="noopener">this Colab notebook</a>.
-        </div>
+        $$v_{3,4} = \left( 1,\; -1,\; \frac{ \lambda_{3,4} - \left[ (s_i+s_k) - \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} }, \; \frac{ \lambda_{3,4} - \left[ (s_i+s_k) - \dfrac{a s_k+b s_i}{s_i+s_k} \right] }{ \dfrac{\sqrt{s_i s_k}\,\delta}{s_i+s_k} } \right),$$
 
-        <p>This completes our proof. We discuss some clarifying details about the spectrum below.</p>
+        <p>which correspond to the eigenvalue numbering. We numerically verify this solution to our matrix here</p>
 
+        <p><a href="https://colab.research.google.com/drive/1X00e1ixf54J5jaZYeSywuTbH0tsS71UT?usp=sharing">https://colab.research.google.com/drive/1X00e1ixf54J5jaZYeSywuTbH0tsS71UT?usp=sharing</a></p>
+
+        <p>This technically completes our proof, but we additionally discuss some clarifying details about our spectrum below.</p>
       </div>
     </details>
 
     <!-- ---------- Eigenvalue analysis ---------- -->
     <details class="accordion">
-      <summary>Eigenvalue Analysis: regimes and transitions</summary>
+      <summary>Eigenvector Analysis</summary>
       <div class="accordion-body">
+        <p>Here we examine eigenvalue behavior in more detail.</p>
 
-        <p><strong>Aligned modes.</strong> The largest eigenvalues occur here: at initialization, the aligned null eigenvalue is $s_{i0}$, and soon the model learns $3s_i - s_{i0}$. These dominate the sharpness except briefly when $s_i$ is learned. The initial sharpness is very high due to the null modes, which have 0 eigenvalue from the GN term — the GN is insufficient for estimating sharpness in this early stage.</p>
+        <p><strong>Aligned Modes</strong></p>
 
-        <p><strong>Cross modes.</strong> Each eigenvalue depends on only two singular values, evolving step-wise. At initialization,</p>
+        <p>First, the aligned modes. The largest eigenvalues occur here: at initialization, the aligned null eigenvalue is $s_{i0}$, and soon the model learns $3s_i - s_{i0}$. These eigenvalues dominate the sharpness except briefly while $s_{i}$ is being learned.</p>
 
-        $$ \lambda_{1,2} = \tfrac12 \left[ - s_{i0} - s_{k0} \pm (s_{i0} - s_{k0} )\right] = -s_{k0}, -s_{i0}, \qquad \lambda_{3,4} = s_{i0}, s_{k0}, $$
+        <p>It is interesting to note the initial sharpness is very high due to the null modes, which have 0 eigenvalue from the GN term. We see the GN is insufficient for estimating sharpness in this early stage.</p>
 
-        <p>with eigenvectors $v_1 = (1, 1, 1, -1)$, $v_2 = (1, 1, -1, 1)$, $v_3 = (1, -1, 1, 1)$, $v_4 = (1, -1, -1, -1)$. The residual has a very large effect, causing eigenvalues that would normally be 0 to be large.</p>
+        <p><strong>Cross Modes</strong></p>
 
-        <p>As the first singular value is learned ($s_k \approx 0, s_i \neq 0$), the matrix becomes</p>
+        <p>To better understand cross modes, note that each eigenvalue depends on only two singular values, and we already know the singular values evolve in a step-like fashion. The behavior of the eigenvalues and eigenvectors can thus be understood by looking at three regimes: when $s_i \approx s_k \approx 0$, when $s_i$ is learned (wlog, assume $s_i$ is learned first) and when $s_k$ is learned.</p>
 
-        $$
-        G^{ik} = \begin{pmatrix}
+        <p>At initialization, our eigenvalue formula is</p>
+
+        $$\lambda_{1,2} = \frac12 \left[ - s_{i0} - s_{k0} \pm (s_{i0} - s_{k0} )\right] = -s_{k0}, -s_{i0}$$
+
+        <p>and</p>
+
+        $$\lambda_{3,4} = s_{i0}, s_{k0}$$
+
+        <p>with the eigenvectors</p>
+
+        $$v_{1} = (1, 1, 1, -1), v_2 = (1, 1, -1, 1)$$
+
+        $$v_{3} = (1, -1, 1, 1), v_4 = (1, -1, -1, -1)$$
+
+        <p>We see the residual has a very large effect here, causing eigenvalues that would normally be 0 ($s_i, s_k$ small) to be very large.</p>
+
+        <p>As the first singular value is being learned we have $s_k \approx 0, s_i \neq 0$. This we can determine by directly inspecting the matrix</p>
+
+        $$(H_{GN}+R)
+        \begin{pmatrix}
+        h_{ik} \\
+        h_{ki} \\
+        g_{ik} \\
+        g_{ki}
+        \end{pmatrix}
+        =
+        \underbrace{
+        \begin{pmatrix}
         s_{i} & -s_{k0} & 0 & 0 \\
         -s_{k0} & s_{i} & 0 & 0 \\
         0 & 0 & 0 & 0 \\
         0 & 0 & 0 & 0
-        \end{pmatrix},
-        $$
+        \end{pmatrix}
+        }_{M}
+        \begin{pmatrix}
+        h_{ik} \\
+        h_{ki} \\
+        g_{ik} \\
+        g_{ki}
+        \end{pmatrix}.$$
 
-        <p>with eigenvalues $\lambda_1=s_{i}-s_{k0}$, $\lambda_2 = 0$, $\lambda_3=s_{i}+s_{k0}$, $\lambda_4=0$ and eigenvectors $v_1=(1,1,0,0)$, $v_3=(1,-1,0,0)$, $v_2=(0,0,1,0)$, $v_4=(0,0,0,1)$. When $s_i \approx s_{i0}$, the residual splits the eigenvalues: one immediately assumes its final value, while the other assumes a value far smaller than its final value.</p>
+        <p>The eigenvalues are (following our existing choice of ordering from our analytic solution)</p>
 
-        <p>When both singular values are learned, $a = b = \delta = 0$ and</p>
+        $$\lambda_1=s_{i}-s_{k0},
+        \quad
+        \lambda_2 = 0,
+        \quad
+        \lambda_3=s_{i}+s_{k0},
+        \quad
+        \lambda_4=0.$$
 
-        $$
-        G^{ik} = \begin{pmatrix}
+        <p>with eigenvectors</p>
+
+        $$v_1=(1,1,0,0),
+        \qquad
+        v_3=(1,-1,0,0),
+        \qquad
+        v_2=(0,0,1,0),
+        \qquad
+        v_4=(0,0,0,1).$$
+
+        <p>When $s_i$ is finished being learned, $s_i \approx s_{i0}$.</p>
+
+        <p>If there were no residual, the GN would cause the eigenvalues to be $s_{i0}$. The residual splits the eigenvalues, causing one to immediately assume it's final value, while the other assumes a value far smaller than it's final value.</p>
+
+        <p>Finally, when both singular values are learned we have $a = b = \delta = 0$ and</p>
+
+        $$(H_{GN}+R)
+        \begin{pmatrix}
+        h_{ik} \\
+        h_{ki} \\
+        g_{ik} \\
+        g_{ki}
+        \end{pmatrix}
+        =
+        \underbrace{
+        \begin{pmatrix}
         s_{i0} + s_{k0} & 0 & 0 & 0 \\
         0 & s_{i0} + s_{k0} & 0 & 0 \\
         0 & 0 & 0 & 0 \\
         0 & 0 & 0 & 0
-        \end{pmatrix},
-        $$
+        \end{pmatrix}
+        }_{M}
+        \begin{pmatrix}
+        h_{ik} \\
+        h_{ki} \\
+        g_{ik} \\
+        g_{ki}
+        \end{pmatrix}.$$
 
-        <p>with $\lambda_1 = \lambda_3 = s_{i0} + s_{k0}$, $\lambda_2 = \lambda_4 = 0$, and the eigenvectors are simply the GN basis vectors. Surprisingly, even though the actual residual may still be large, the eigenvectors and eigenvalues assume the GN-predicted values as soon as the two singular values are learned.</p>
+        <p>where the eigenvalues are $\lambda_1 = \lambda_3 = s_{i0} + s_{k0}, \lambda_2 = \lambda_4 = 0$. Here the eigenvectors are the GN basis vectors. Even though the actual residual may still be large here (other singular values are still being learned), the eigenvectors and eigenvalues stop evolving at this point. The residual does not couple these modes with the overall learning dynamics.</p>
 
-        <p><strong>Transitions.</strong> When $s_i$ is being learned ($s_k = 0$),</p>
+        <p>What about behavior when $s_i, s_k$ are being learned? When $s_i$ is being learned, we have $s_k = 0$ and</p>
 
-        $$ \lambda_{1,2} = \tfrac12 \left[ 2 s_i - s_{i0} - s_{k0} \pm (s_{i0} - s_{k0})\right] = s_i - s_{k0},\; s_i - s_{i0}, $$
+        $$\lambda_{1,2} = \frac12 \left[ 2 s_i - s_{i0} - s_{k0} \pm (s_{i0} - s_{k0}),\right] = s_i - s_{k0}, s_i - s_{i0}$$
 
-        <p>increasing monotonically. The other set,</p>
+        <p>so these eigenvalues increase monotonically from $s_i = 0$ to $s_i \approx s_{i0}$. The behavior of the other set of eigenvalues is more complicated</p>
 
-        $$ \lambda_{3,4} = \tfrac12 \left[ s_{i0}+s_{k0} \pm \sqrt{(2 s_i- s_{i0} + s_{k0})^2 + 4s_i s_k} \right], $$
+        $$\lambda_{3,4} = \frac12 \left[ s_{i0}+s_{k0} \pm \sqrt{(2 s_i- s_{i0} + s_{k0})^2 + 4s_i s_k} \right]$$
 
-        <p>has its $s_i$-dependence entirely in the right-hand term, which reaches a minimum at $s_i = (s_{i0} - s_{k0})/2$ (but not 0, since $4 s_i s_k \geq 0$). So $\lambda_3$ initially decreases from $s_{i0}$ then increases to $s_{i0} + s_{k0}$; $\lambda_4$ initially increases from $s_{k0}$ then decreases to $0$. At the minimum,</p>
+        <p>The dependence on $s_i$ growth is entirely in the right side term. This term reaches a minimum when $s_i = (s_{i0} - s_{k0})/2$, but is not 0 (since $4 s_i s_k \geq 0$, although small). And then as $s_i$ grows beyond this, this term increases to the eventual limit $s_i \approx s_{i0}$.</p>
 
-        $$ \lambda_3 = \tfrac12 \left[ s_{i0}+s_{k0} + \sqrt{4s_i s_k} \right], \qquad \lambda_4 = \tfrac12 \left[ s_{i0}+s_{k0} - \sqrt{4s_i s_k} \right], $$
+        <p>Therefore we find the eigenvalue $\lambda_3$ initially decreases from $s_{i0}$ until $s_i = (s_{i0} - s_{k0})/2$, and then increases to $s_{i0} + s_{k0}$. And $\lambda_4$ (with the opposite sign in the discriminant) initially increases from $s_{k0}$ until $s_i = (s_{i0} - s_{k0})/2$, and then decreases to $0$. At $s_i = (s_{i0} - s_{k0})/2$, we have</p>
 
-        <p>close but not zero unless $s_k = 0$ exactly.</p>
+        $$\lambda_3 = \frac12 \left[ s_{i0}+s_{k0} + \sqrt{4s_i s_k} \right], \lambda_4 = \frac12 \left[ s_{i0}+s_{k0} - \sqrt{4s_i s_k} \right]$$
 
-        <p>At the second transition (learning $s_k$): for $\lambda_{1,2}$,</p>
+        <p>which is close but not zero except if $s_k = 0$ exactly.</p>
 
-        $$ \lambda_{1,2} = \tfrac12 \left[ s_{i0}+ 2s_k - s_{k0} \pm\sqrt{ 4 s_{i0} s_k + (s_{i0}-s_{k0})^2 }\,\right], $$
+        <p>When $s_k$ is being learned, $\lambda_{1, 2}$ are</p>
 
-        <p>where the $\sqrt{}$ term dominates the small-$s_k$ behavior (since $\frac{d}{d s_k} 4s_k^2 = 8 s_k \approx 0$ while the other slope is $4 s_{i0}$). Thus $\lambda_1$ monotonically increases to $s_{i0} + s_{k0}$, while $\lambda_2$ dips before increasing again, staying at $0$. For $\lambda_{3,4}$,</p>
+        $$\lambda_{1, 2} = \frac12 \left[ s_{i0}+ 2s_k - s_{k0} \pm\sqrt{ 4 s_{i0} s_k + (s_{i0}-s_{k0})^2 }\,\right]$$
 
-        $$ \lambda_{3,4} = \tfrac12 \left[ (s_{i0}+s_{k0}) \pm \sqrt{ \bigl(2(s_{i0}-s_k)-(s_{i0}-s_{k0})\bigr)^2 + 4 s_{i0} s_k }\,\right], $$
+        <p>and whether it goes up or down depends on the relative strengths of $2s_k, \sqrt{ 4 s_{i0} s_k + (s_{i0}-s_{k0})^2 }$. Taking the square of both terms and comparing their slopes reveals the square root term dominates the small $s_k$ behavior, since $\frac{d}{d s_k} 4s_k^2 = 8 s_k \approx 0$, while the other term is $4 s_{i0}$.</p>
 
-        <p>whose square-root term expands to $(s_{i0} + s_{k0})^2 + 4 s_{k}^2 - 4 s_k s_{k0}$, initially decreasing then increasing — a bump that doesn't change the final values. Both are already at their end values.</p>
+        <p>Thus for $\lambda_1$ where both terms are positive, the eigenvalue monotonically increases to $s_{i0} + s_{k0}$, while $\lambda_2$ first decreases before increasing again, causing a small bump but staying at $0$.</p>
 
-        <p>In summary, the cross-mode eigenvalues start at $-s_{k0}, -s_{i0}, s_{k0}, s_{i0}$, change monotonically to $s_{i0}-s_{k0}, 0, s_{k0}+s_{i0}, 0$, and then as $s_k$ is learned, $s_{i0}-s_{k0}$ increases to $s_{i0}+s_{k0}$ while the others (already at equilibrium) make small bumps.</p>
+        <p>For $\lambda_{3, 4}$ we have</p>
 
+        $$\lambda_{3,4} = \frac12 \left[ (s_{i0}+s_{k0}) \pm \sqrt{ \bigl(2(s_{i0}-s_k)-(s_{i0}-s_{k0})\bigr)^2 + 4 s_{i0} s_k }\,\right],$$
+
+        <p>Thus everything depends on the behavior of the square root term. Expanding it out yields $(s_{i0} + s_{k0})^2 + 4 s_{k}^2 - 4 s_k s_{k0}$, which initially decreases as a function of $s_k$ but later increases, producing a bump but not changing the final values. Both eigenvalues are already at their end values, which makes sense here.</p>
+
+        <p>This completes our analysis of the cross-mode eigenvalues. We see that we initially get</p>
+
+        $$-s_{k0},\quad -s_{i0},\quad s_{k0},\quad s_{i0},$$
+
+        <p>which change monotonically (with the same rate that $s_i$ changes with) to</p>
+
+        $$s_{i0}-s_{k0},\quad 0,\quad s_{k0}+s_{i0},\quad 0.$$
+
+        <p>Then, as we learn $s_k$, we find that $s_{i0}-s_{k0}$ monotonically increases to $s_{i0}+s_{k0}$. The other three eigenvalues are already at their equilibrium values. $\lambda_2 = 0, \lambda_3 = s_{i0} + s_{k0}$ initially decrease before increasing again, while $\lambda_4 = 0$ initially increases before decreasing again.</p>
       </div>
     </details>
 
