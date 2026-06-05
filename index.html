@@ -694,27 +694,27 @@
 
         <p>Thus $K_{ki} = (\mathbf{p}_k \mathbf{p}_k^\top) \otimes (u_i u_i^\top)$, whose nonzero eigenvector is $\mathbf{p}_k \otimes u_i$ with eigenvalue $1$. Just like the 2-layer case, the eigenvectors of the NTK (formed by time-dependent sums of $K_{ki}$) are $\mathbf{p}_k \otimes u_i$, which do not change in time. Their eigenvalues are given by the $c_{ki}(t)$:</p>
 
-        $$\Theta(t)\, (\mathbf{p}_k \otimes u_i) = c_{ki}(t)\, (\mathbf{p}_k \otimes u_i) = \left(\sum_{\ell=1}^{L} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\right) (\mathbf{p}_k \otimes u_i),$$
+        $$\Theta(t)\, (\mathbf{p}_k \otimes u_i) = c_{ki}(t)\, (\mathbf{p}_k \otimes u_i) = \left(\sum_{\ell=1}^{L} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\right) (\mathbf{p}_k \otimes u_i).$$
 
-        <p>a complicated sum of singular values. For the eigenvectors that correspond to aligned modes ($k = i$), the terms in the sum are independent of $\ell$ and the expression simplifies to</p>
-
-        $$\Theta(t)\, (\mathbf{p}_i \otimes u_i) = L\, s_i(t)^{2(L-1)/L}\, (\mathbf{p}_i \otimes u_i).$$
-
-        <p>Although the precise eigenvalue for cross modes is complex, we note that it only depends on a pair of singular values. In deep linear networks these singular values undergo step-like transitions, so the eigenvalues will undergo one or two step-like transitions as well.</p>
+        <p>This sum of singular values can be simplified using the geometric series to:</p>
+          
+        $$
+        \lambda_{ik} = \left(\sum_{\ell=1}^{L} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\right) = \begin{cases} L \, s_i^{2(L-1)/L}, & i = k \\[1em] \dfrac{s_i^2 - s_k^2}{s_i^{2/L} - s_k^{2/L}}, & i \neq k \end{cases}
+        $$
       </div>
     </details>
 
-    <p>Through this calculation, we find the same eigenvectors $\mathbf{p}_k \otimes u_i$ as before, but with new eigenvalues:</p>
+    <p>Through this calculation, we find the same eigenvectors $\mathbf{p}_k \otimes u_i$ as before:</p>
 
-    $$\Theta(t)\, (\mathbf{p}_k \otimes u_i) = \left(\sum_{\ell=1}^{L} s_k(t)^{2(\ell-1)/L}\, s_i(t)^{2(L-\ell)/L}\right) (\mathbf{p}_k \otimes u_i).$$
+    $$\Theta(t)\, (\mathbf{p}_k \otimes u_i) = \lambda_{ik} (\mathbf{p}_k \otimes u_i).$$
 
-    <p>For the aligned modes $i = k$, this simplifies to:</p>
+    <p>where the eigenvalues $\lambda_{ik}$ are given by the time-dependent sums of singular values $c_{ki}(t)$, given by:</p>
 
-    $$\boxed{\;\Theta(t)\, (\mathbf{p}_i \otimes u_i) = L\, s_i(t)^{2(L-1)/L}\, (\mathbf{p}_i \otimes u_i)\;}$$
+    $$
+    \lambda_{ik} = \begin{cases} L \, s_i^{2(L-1)/L}, & i = k \\[1em] \dfrac{s_i^2 - s_k^2}{s_i^{2/L} - s_k^{2/L}}, & i \neq k \end{cases}
+    $$
 
-    <p>which collapses to our earlier result $2s_i(t)$ for $L = 2$. For modes connecting $i \neq k$, the eigenvalues are more complicated; E.g., a 3-layer network has:</p>
-
-    $$\Theta(t)\,(\mathbf{p}_k \otimes u_i) = \left(s_i(t)^{4/3} + s_k(t)^{2/3} s_i(t)^{2/3} + s_k(t)^{4/3}\right) (\mathbf{p}_k \otimes u_i).$$
+    <p>Note the eigenvalues for cross modes ($i \neq k$) depend on the difference of two singular values. In deep linear networks we know the singular values undergo step-like transitions, so the eigenvalues will also undergo step-like transitions as well</p>
 
     <p>The widget below trains a multi-layer linear network. In model details, you can control the number of hidden layers to train.</p>
 
